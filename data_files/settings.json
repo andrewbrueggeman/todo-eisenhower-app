@@ -1,0 +1,12 @@
+{
+  "timer_last_duration": 20,
+  "auto_restart_timer": true,
+  "outlook_sync_enabled": true,
+  "outlook_last_sync": null,
+  "layout": {
+    "matrix_height_ratio": 0.6,
+    "notes_height_ratio": 0.1,
+    "bottom_height_ratio": 0.3
+  },
+  "timer_sound_enabled": true
+}
