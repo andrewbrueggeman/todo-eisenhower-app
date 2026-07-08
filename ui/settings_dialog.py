@@ -321,3 +321,128 @@ class SettingsDialog:
         except Exception as e:
             messagebox.showerror("Settings Error", f"❌ Failed to apply settings:\n{str(e)}")
             print(f"[{datetime.now().strftime('%H:%M:%S')}] Error applying settings: {e}")
+
+# Updated settings_dialog.py (additions for Outlook settings)
+"""
+Add these methods to your existing settings_dialog.py file
+"""
+
+def setup_outlook_tab(self, parent):
+    """Setup Outlook integration settings tab"""
+    outlook_frame = tk.Frame(parent, bg="#f0f0f0")
+    outlook_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+    
+    # Sync Interval Setting
+    sync_frame = tk.LabelFrame(outlook_frame, text="Sync Frequency", 
+                              bg="#f0f0f0", font=("Arial", 10, "bold"))
+    sync_frame.pack(fill=tk.X, pady=(0, 15))
+    
+    tk.Label(sync_frame, text="Sync every:", bg="#f0f0f0", 
+            font=("Arial", 9)).pack(anchor=tk.W, padx=10, pady=(10, 5))
+    
+    # Sync interval options
+    self.sync_interval_var = tk.StringVar()
+    sync_options = [
+        ("15 minutes", "900"),
+        ("30 minutes", "1800"), 
+        ("1 hour", "3600"),
+        ("2 hours", "7200"),
+        ("4 hours", "14400")
+    ]
+    
+    for text, value in sync_options:
+        tk.Radiobutton(sync_frame, text=text, variable=self.sync_interval_var,
+                      value=value, bg="#f0f0f0", font=("Arial", 9)).pack(
+                      anchor=tk.W, padx=20, pady=2)
+    
+    # Days Ahead Setting
+    days_frame = tk.LabelFrame(outlook_frame, text="Meeting Range", 
+                              bg="#f0f0f0", font=("Arial", 10, "bold"))
+    days_frame.pack(fill=tk.X, pady=(0, 15))
+    
+    tk.Label(days_frame, text="Pull meetings for:", bg="#f0f0f0", 
+            font=("Arial", 9)).pack(anchor=tk.W, padx=10, pady=(10, 5))
+    
+    # Days ahead options
+    self.days_ahead_var = tk.StringVar()
+    days_options = [
+        ("Today only", "0"),
+        ("Today + 1 day", "1"),
+        ("Today + 2 days", "2"),
+        ("Today + 3 days", "3"),
+        ("Today + 1 week", "7")
+    ]
+    
+    for text, value in days_options:
+        tk.Radiobutton(days_frame, text=text, variable=self.days_ahead_var,
+                      value=value, bg="#f0f0f0", font=("Arial", 9)).pack(
+                      anchor=tk.W, padx=20, pady=2)
+    
+    # Manual Sync Button
+    manual_frame = tk.LabelFrame(outlook_frame, text="Manual Control", 
+                                bg="#f0f0f0", font=("Arial", 10, "bold"))
+    manual_frame.pack(fill=tk.X, pady=(0, 15))
+    
+    tk.Button(manual_frame, text="Sync Now", command=self.manual_sync,
+             bg="#4CAF50", fg="white", font=("Arial", 9, "bold"),
+             relief=tk.FLAT, padx=20, pady=5).pack(pady=10)
+    
+    # Status display
+    self.sync_status_var = tk.StringVar(value="Status: Ready")
+    tk.Label(manual_frame, textvariable=self.sync_status_var, 
+            bg="#f0f0f0", font=("Arial", 8)).pack(pady=(0, 10))
+
+def load_outlook_settings(self):
+    """Load Outlook settings into the dialog"""
+    try:
+        settings = self.settings_manager.get_settings()
+        
+        # Set sync interval
+        sync_interval = str(settings.get('outlook_sync_interval', 3600))
+        self.sync_interval_var.set(sync_interval)
+        
+        # Set days ahead
+        days_ahead = str(settings.get('outlook_days_ahead', 1))
+        self.days_ahead_var.set(days_ahead)
+        
+    except Exception as e:
+        print(f"Error loading Outlook settings: {e}")
+        # Set defaults
+        self.sync_interval_var.set("3600")  # 1 hour
+        self.days_ahead_var.set("1")  # 1 day ahead
+
+def save_outlook_settings(self):
+    """Save Outlook settings"""
+    try:
+        settings = self.settings_manager.get_settings()
+        
+        # Update Outlook settings
+        settings['outlook_sync_interval'] = int(self.sync_interval_var.get())
+        settings['outlook_days_ahead'] = int(self.days_ahead_var.get())
+        
+        self.settings_manager.save_settings(settings)
+        
+        # Restart sync with new settings if outlook integration exists
+        if hasattr(self.parent, 'outlook_sync'):
+            self.parent.outlook_sync.stop_periodic_sync()
+            self.parent.outlook_sync.start_periodic_sync()
+            
+        return True
+        
+    except Exception as e:
+        print(f"Error saving Outlook settings: {e}")
+        return False
+
+def manual_sync(self):
+    """Trigger manual Outlook sync"""
+    try:
+        if hasattr(self.parent, 'outlook_sync'):
+            self.sync_status_var.set("Status: Syncing...")
+            self.parent.outlook_sync.manual_sync()
+            # Update status after a delay
+            self.parent.after(2000, lambda: self.sync_status_var.set("Status: Sync completed"))
+        else:
+            self.sync_status_var.set("Status: Outlook not connected")
+    except Exception as e:
+        self.sync_status_var.set(f"Status: Error - {str(e)}")
+
