@@ -1,448 +1,274 @@
-"""
-Settings Dialog
-
-Provides configuration options for the application including:
-- UI layout customization
-- Timer preferences
-- System monitoring settings
-- Data management options
-"""
-
 import tkinter as tk
-from tkinter import ttk, messagebox, filedialog
-from datetime import datetime
-import os
-import shutil
-import json
+from tkinter import ttk, colorchooser
+from tkinter import messagebox
 
 class SettingsDialog:
     def __init__(self, parent, app):
-        self.result = None
         self.parent = parent
         self.app = app
+        self.result = None
         
-        # Create dialog window
         self.dialog = tk.Toplevel(parent)
-        self.dialog.title("⚙️ Application Settings")
-        self.dialog.geometry("700x650")  # Increased from 650x600
+        self.dialog.title("⚙️ Settings")
         self.dialog.transient(parent)
         self.dialog.grab_set()
-        self.dialog.resizable(True, True)
-        self.dialog.minsize(600, 550)  # Set minimum size
+        self.dialog.resizable(False, False)
         
-        # Center the dialog
         self.center_dialog()
+        self.setup_ui()
         
-        # Configure dialog styling
-        self.dialog.configure(bg="#f0f0f0")
-        
-        # Load current settings
-        self.current_settings = self.load_current_settings()
-        
-        self.setup_dialog()
-        
-        # Keyboard bindings
-        self.dialog.bind('<Escape>', lambda e: self.cancel())
-        
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Settings dialog opened")
-    
     def center_dialog(self):
-        """Center dialog on parent window"""
         self.dialog.update_idletasks()
+        width, height = 650, 700  # Made slightly wider for color picker
+        x = self.parent.winfo_rootx() + (self.parent.winfo_width() - width) // 2
+        y = self.parent.winfo_rooty() + (self.parent.winfo_height() - height) // 2
+        self.dialog.geometry(f"{width}x{height}+{x}+{y}")
         
-        # Get parent window position and size
-        parent_x = self.parent.winfo_rootx()
-        parent_y = self.parent.winfo_rooty()
-        parent_width = self.parent.winfo_width()
-        parent_height = self.parent.winfo_height()
-        
-        # Calculate center position
-        dialog_width = 700
-        dialog_height = 650
-        x = parent_x + (parent_width - dialog_width) // 2
-        y = parent_y + (parent_height - dialog_height) // 2
-        
-        self.dialog.geometry(f"{dialog_width}x{dialog_height}+{x}+{y}")
-    
-    def load_current_settings(self):
-        """Load current application settings"""
-        return {
-            'layout': self.app.layout_settings.copy(),
-            'timer': {
-                'default_duration': self.app.data_manager.settings_data.get('timer_last_duration', 25),
-                'auto_restart': self.app.data_manager.settings_data.get('auto_restart_timer', True),
-                'sound_enabled': self.app.data_manager.settings_data.get('timer_sound_enabled', True)
-            },
-            'monitoring': {
-                'enabled': True,
-                'update_interval': self.app.data_manager.settings_data.get('monitor_update_interval', 1)
-            },
-            'outlook': {
-                'sync_enabled': self.app.data_manager.settings_data.get('outlook_sync_enabled', True),
-                'sync_days_ahead': self.app.data_manager.settings_data.get('outlook_sync_days', 7)
-            }
-        }
-    
-    def setup_dialog(self):
-        """Setup dialog UI components"""
-        # Main container with padding
-        main_frame = tk.Frame(self.dialog, bg="#f0f0f0", padx=20, pady=20)
+    def setup_ui(self):
+        main_frame = tk.Frame(self.dialog, padx=20, pady=20)
         main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Header
-        header_label = tk.Label(main_frame, text="⚙️ Application Settings",
-                               font=("Arial", 18, "bold"), 
-                               bg="#f0f0f0", fg="#2c3e50")
-        header_label.pack(pady=(0, 20))
+        tk.Label(main_frame, text="Application Settings", font=("Arial", 16, "bold")).pack(anchor=tk.W, pady=(0, 20))
         
-        # Create notebook for tabbed interface
-        self.notebook = ttk.Notebook(main_frame)
-        self.notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        notebook = ttk.Notebook(main_frame)
+        notebook.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
         
-        # Setup tabs
-        self.setup_layout_tab()
-        self.setup_timer_tab()
+        # Layout Tab
+        layout_tab = tk.Frame(notebook, padx=15, pady=15)
+        notebook.add(layout_tab, text="Layout & Visibility")
+        self.setup_layout_tab(layout_tab)
         
-        # Button section - THIS WAS MISSING!
-        self.setup_buttons(main_frame)
-    def setup_layout_tab(self):
-        """Setup UI layout configuration tab"""
-        layout_frame = ttk.Frame(self.notebook)
-        self.notebook.add(layout_frame, text="🎨 Layout")
+        # Appearance Tab (NEW!)
+        appearance_tab = tk.Frame(notebook, padx=15, pady=15)
+        notebook.add(appearance_tab, text="Appearance")
+        self.setup_appearance_tab(appearance_tab)
         
-        content_frame = tk.Frame(layout_frame, bg="#f0f0f0", padx=20, pady=20)
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        # Timer Tab
+        timer_tab = tk.Frame(notebook, padx=15, pady=15)
+        notebook.add(timer_tab, text="Timer Settings")
+        self.setup_timer_tab(timer_tab)
         
-        # Layout options
-        tk.Label(content_frame, text="UI Component Heights", 
-                font=("Arial", 14, "bold"), bg="#f0f0f0", fg="#2c3e50").pack(anchor=tk.W, pady=(0, 15))
+        # Buttons
+        btn_frame = tk.Frame(main_frame)
+        btn_frame.pack(fill=tk.X, pady=(20, 0))
         
-        # Matrix height - Expanded range
-        matrix_frame = tk.Frame(content_frame, bg="#f0f0f0")
+        tk.Button(btn_frame, text="Save Settings", command=self.save, 
+                  bg="#4CAF50", fg="white", font=("Arial", 11, "bold"), padx=20, pady=8).pack(side=tk.RIGHT, padx=(10, 0))
+        tk.Button(btn_frame, text="Cancel", command=self.cancel, 
+                  bg="#95a5a6", fg="white", font=("Arial", 11, "bold"), padx=20, pady=8).pack(side=tk.RIGHT)
+        
+    def setup_layout_tab(self, parent):
+        settings = self.app.data_manager.settings_data.get('layout', {})
+        
+        # Component Visibility
+        visibility_frame = tk.LabelFrame(parent, text="Component Visibility", font=("Arial", 12, "bold"), padx=10, pady=10)
+        visibility_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        self.show_timer_var = tk.BooleanVar(value=settings.get('show_timer', True))
+        tk.Checkbutton(visibility_frame, text="Show Pomodoro Timer", variable=self.show_timer_var, 
+                       font=("Arial", 11)).pack(anchor=tk.W, pady=3)
+        
+        self.show_notes_var = tk.BooleanVar(value=settings.get('show_notes', True))
+        tk.Checkbutton(visibility_frame, text="Show Daily Notes", variable=self.show_notes_var, 
+                       font=("Arial", 11)).pack(anchor=tk.W, pady=3)
+        
+        self.show_monitor_var = tk.BooleanVar(value=settings.get('show_monitor', True))
+        tk.Checkbutton(visibility_frame, text="Show System Monitor (CPU/RAM)", variable=self.show_monitor_var, 
+                       font=("Arial", 11)).pack(anchor=tk.W, pady=3)
+        
+        # Layout Positioning
+        position_frame = tk.LabelFrame(parent, text="Layout Positioning", font=("Arial", 12, "bold"), padx=10, pady=10)
+        position_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        positions = ["top", "middle", "bottom"]
+        
+        matrix_frame = tk.Frame(position_frame)
         matrix_frame.pack(fill=tk.X, pady=8)
+        tk.Label(matrix_frame, text="Eisenhower Matrix:", width=20, anchor=tk.W, font=("Arial", 11)).pack(side=tk.LEFT)
+        self.matrix_pos_var = tk.StringVar(value=settings.get('matrix_position', 'top'))
+        ttk.Combobox(matrix_frame, textvariable=self.matrix_pos_var, values=positions, 
+                     state="readonly", width=15, font=("Arial", 10)).pack(side=tk.LEFT)
         
-        tk.Label(matrix_frame, text="Eisenhower Matrix:", 
-                font=("Arial", 11), bg="#f0f0f0", width=20, anchor=tk.W).pack(side=tk.LEFT)
-        
-        self.matrix_height_var = tk.DoubleVar(value=self.current_settings['layout']['matrix_height_ratio'])
-        matrix_scale = tk.Scale(matrix_frame, from_=0.3, to=0.9, resolution=0.05,  # Expanded from 0.4-0.8
-                               orient=tk.HORIZONTAL, variable=self.matrix_height_var,
-                               bg="#f0f0f0", font=("Arial", 9), length=300)  # Made slider longer
-        matrix_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
-        
-        self.matrix_percent_label = tk.Label(matrix_frame, text="60%", font=("Arial", 9), 
-                                            bg="#f0f0f0", fg="#7f8c8d", width=6)
-        self.matrix_percent_label.pack(side=tk.RIGHT)
-        
-        # Update percentage display for matrix
-        def update_matrix_percent(*args):
-            self.matrix_percent_label.config(text=f"{int(self.matrix_height_var.get() * 100)}%")
-        
-        self.matrix_height_var.trace('w', update_matrix_percent)
-        update_matrix_percent()
-        
-        # Notes height - Expanded range
-        notes_frame = tk.Frame(content_frame, bg="#f0f0f0")
+        notes_frame = tk.Frame(position_frame)
         notes_frame.pack(fill=tk.X, pady=8)
+        tk.Label(notes_frame, text="Daily Notes:", width=20, anchor=tk.W, font=("Arial", 11)).pack(side=tk.LEFT)
+        self.notes_pos_var = tk.StringVar(value=settings.get('notes_position', 'middle'))
+        ttk.Combobox(notes_frame, textvariable=self.notes_pos_var, values=positions, 
+                     state="readonly", width=15, font=("Arial", 10)).pack(side=tk.LEFT)
         
-        tk.Label(notes_frame, text="Notes Section:", 
-                font=("Arial", 11), bg="#f0f0f0", width=20, anchor=tk.W).pack(side=tk.LEFT)
-        
-        self.notes_height_var = tk.DoubleVar(value=self.current_settings['layout']['notes_height_ratio'])
-        notes_scale = tk.Scale(notes_frame, from_=0.05, to=0.5, resolution=0.05,  # Expanded from 0.1-0.4
-                              orient=tk.HORIZONTAL, variable=self.notes_height_var,
-                              bg="#f0f0f0", font=("Arial", 9), length=300)  # Made slider longer
-        notes_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
-        
-        self.notes_percent_label = tk.Label(notes_frame, text="20%", font=("Arial", 9), 
-                                           bg="#f0f0f0", fg="#7f8c8d", width=6)
-        self.notes_percent_label.pack(side=tk.RIGHT)
-        
-        # Update percentage display for notes
-        def update_notes_percent(*args):
-            self.notes_percent_label.config(text=f"{int(self.notes_height_var.get() * 100)}%")
-        
-        self.notes_height_var.trace('w', update_notes_percent)
-        update_notes_percent()
-        
-        # Bottom section height - Expanded range
-        bottom_frame = tk.Frame(content_frame, bg="#f0f0f0")
+        bottom_frame = tk.Frame(position_frame)
         bottom_frame.pack(fill=tk.X, pady=8)
+        tk.Label(bottom_frame, text="Timer & Monitor:", width=20, anchor=tk.W, font=("Arial", 11)).pack(side=tk.LEFT)
+        self.bottom_pos_var = tk.StringVar(value=settings.get('bottom_position', 'bottom'))
+        ttk.Combobox(bottom_frame, textvariable=self.bottom_pos_var, values=positions, 
+                     state="readonly", width=15, font=("Arial", 10)).pack(side=tk.LEFT)
         
-        tk.Label(bottom_frame, text="Timer/Monitor:", 
-                font=("Arial", 11), bg="#f0f0f0", width=20, anchor=tk.W).pack(side=tk.LEFT)
-        
-        self.bottom_height_var = tk.DoubleVar(value=self.current_settings['layout']['bottom_height_ratio'])
-        bottom_scale = tk.Scale(bottom_frame, from_=0.1, to=0.6, resolution=0.05,  # Expanded from 0.1-0.3
-                               orient=tk.HORIZONTAL, variable=self.bottom_height_var,
-                               bg="#f0f0f0", font=("Arial", 9), length=300)  # Made slider longer
-        bottom_scale.pack(side=tk.LEFT, fill=tk.X, expand=True, padx=10)
-        
-        self.bottom_percent_label = tk.Label(bottom_frame, text="20%", font=("Arial", 9), 
-                                            bg="#f0f0f0", fg="#7f8c8d", width=6)
-        self.bottom_percent_label.pack(side=tk.RIGHT)
-        
-        # Update percentage display for bottom
-        def update_bottom_percent(*args):
-            self.bottom_percent_label.config(text=f"{int(self.bottom_height_var.get() * 100)}%")
-        
-        self.bottom_height_var.trace('w', update_bottom_percent)
-        update_bottom_percent()
-        
-        # Reset button
-        reset_btn = tk.Button(content_frame, text="🔄 Reset to Default", 
-                             command=self.reset_layout_defaults,
-                             bg="#3498db", fg="white", font=("Arial", 10),
-                             relief=tk.FLAT, padx=15, pady=5)
-        reset_btn.pack(pady=15)
-        
-        # Layout preview info
-        info_label = tk.Label(content_frame, 
-                             text="💡 Layout changes will take effect after restarting the application.",
-                             font=("Arial", 9), bg="#f0f0f0", fg="#7f8c8d", wraplength=500)
-        info_label.pack(pady=10)
-        
-        # Total percentage display
-        total_frame = tk.Frame(content_frame, bg="#f0f0f0")
-        total_frame.pack(fill=tk.X, pady=10)
-        
-        self.total_label = tk.Label(total_frame, text="Total: 100%", 
-                                   font=("Arial", 11, "bold"), bg="#f0f0f0", fg="#2c3e50")
-        self.total_label.pack()
-        
-        # Update total percentage
-        def update_total(*args):
-            total = (self.matrix_height_var.get() + self.notes_height_var.get() + 
-                    self.bottom_height_var.get()) * 100
-            color = "#27ae60" if 95 <= total <= 105 else "#e74c3c"
-            self.total_label.config(text=f"Total: {total:.0f}%", fg=color)
-        
-        # Bind all sliders to update total
-        self.matrix_height_var.trace('w', update_total)
-        self.notes_height_var.trace('w', update_total)
-        self.bottom_height_var.trace('w', update_total)
-        update_total()
+        # Note about restart
+        note_frame = tk.Frame(parent, bg="#fff3cd", relief=tk.RAISED, bd=1)
+        note_frame.pack(fill=tk.X, pady=(10, 0))
+        tk.Label(note_frame, text="⚠️ Layout changes require app restart to take effect", 
+                 fg="#856404", bg="#fff3cd", font=("Arial", 10, "italic"), padx=10, pady=8).pack()
     
-    def setup_timer_tab(self):
-        """Setup timer configuration tab"""
-        timer_frame = ttk.Frame(self.notebook)
-        self.notebook.add(timer_frame, text="⏱️ Timer")
+    def setup_appearance_tab(self, parent):
+        """NEW TAB: Appearance settings including button colors"""
+        settings = self.app.data_manager.settings_data
         
-        content_frame = tk.Frame(timer_frame, bg="#f0f0f0", padx=20, pady=20)
-        content_frame.pack(fill=tk.BOTH, expand=True)
+        # Add Task Button Colors
+        button_frame = tk.LabelFrame(parent, text="Add Task Button Colors", font=("Arial", 12, "bold"), padx=10, pady=10)
+        button_frame.pack(fill=tk.X, pady=(0, 20))
         
-        # Default timer duration
-        tk.Label(content_frame, text="Timer Preferences", 
-                font=("Arial", 14, "bold"), bg="#f0f0f0", fg="#2c3e50").pack(anchor=tk.W, pady=(0, 15))
+        # Current colors
+        self.button_bg_color = settings.get('add_task_button_bg', '#4CAF50')  # Default green
+        self.button_fg_color = settings.get('add_task_button_fg', 'white')     # Default white
         
-        duration_frame = tk.Frame(content_frame, bg="#f0f0f0")
-        duration_frame.pack(fill=tk.X, pady=5)
+        # Background color
+        bg_frame = tk.Frame(button_frame)
+        bg_frame.pack(fill=tk.X, pady=8)
+        tk.Label(bg_frame, text="Background Color:", font=("Arial", 11), width=18, anchor=tk.W).pack(side=tk.LEFT)
         
-        tk.Label(duration_frame, text="Default Duration (minutes):", 
-                font=("Arial", 11), bg="#f0f0f0").pack(side=tk.LEFT)
+        self.bg_color_preview = tk.Label(bg_frame, text="  Sample  ", bg=self.button_bg_color, fg=self.button_fg_color, 
+                                        font=("Arial", 10, "bold"), relief=tk.RAISED, bd=2, padx=10, pady=3)
+        self.bg_color_preview.pack(side=tk.LEFT, padx=(10, 5))
         
-        self.timer_duration_var = tk.IntVar(value=self.current_settings['timer']['default_duration'])
-        duration_spinbox = tk.Spinbox(duration_frame, from_=1, to=120, 
-                                     textvariable=self.timer_duration_var,
-                                     font=("Arial", 11), width=10)
-        duration_spinbox.pack(side=tk.RIGHT)
+        tk.Button(bg_frame, text="Choose Color", command=self.choose_bg_color, 
+                  bg="#3498db", fg="white", font=("Arial", 10), padx=10).pack(side=tk.LEFT, padx=5)
+        
+        # Text color
+        fg_frame = tk.Frame(button_frame)
+        fg_frame.pack(fill=tk.X, pady=8)
+        tk.Label(fg_frame, text="Text Color:", font=("Arial", 11), width=18, anchor=tk.W).pack(side=tk.LEFT)
+        
+        self.fg_color_preview = tk.Label(fg_frame, text="  Sample  ", bg=self.button_bg_color, fg=self.button_fg_color, 
+                                        font=("Arial", 10, "bold"), relief=tk.RAISED, bd=2, padx=10, pady=3)
+        self.fg_color_preview.pack(side=tk.LEFT, padx=(10, 5))
+        
+        tk.Button(fg_frame, text="Choose Color", command=self.choose_fg_color, 
+                  bg="#3498db", fg="white", font=("Arial", 10), padx=10).pack(side=tk.LEFT, padx=5)
+        
+        # Preset color combinations
+        presets_frame = tk.LabelFrame(parent, text="Quick Presets", font=("Arial", 12, "bold"), padx=10, pady=10)
+        presets_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        presets = [
+            ("Green & White (Default)", "#4CAF50", "white"),
+            ("Black & White", "#000000", "white"),
+            ("Blue & White", "#2196F3", "white"),
+            ("Dark Gray & White", "#424242", "white"),
+            ("Red & White", "#f44336", "white"),
+            ("Purple & White", "#9C27B0", "white")
+        ]
+        
+        preset_buttons_frame = tk.Frame(presets_frame)
+        preset_buttons_frame.pack(fill=tk.X)
+        
+        for i, (name, bg, fg) in enumerate(presets):
+            row = i // 2
+            col = i % 2
+            
+            btn_frame = tk.Frame(preset_buttons_frame)
+            if col == 0:
+                btn_frame.pack(fill=tk.X, pady=2)
+            else:
+                btn_frame.pack(fill=tk.X, pady=2)
+            
+            preset_btn = tk.Button(btn_frame, text=name, command=lambda b=bg, f=fg: self.apply_preset(b, f),
+                                  bg=bg, fg=fg, font=("Arial", 10), padx=10, pady=3, width=25)
+            if col == 0:
+                preset_btn.pack(side=tk.LEFT, padx=(0, 5))
+            else:
+                preset_btn.pack(side=tk.RIGHT, padx=(5, 0))
+        
+        # Note
+        note_frame = tk.Frame(parent, bg="#e8f5e9", relief=tk.RAISED, bd=1)
+        note_frame.pack(fill=tk.X, pady=(10, 0))
+        tk.Label(note_frame, text="💡 Changes take effect immediately when you save settings", 
+                 fg="#2e7d32", bg="#e8f5e9", font=("Arial", 10, "italic"), padx=10, pady=8).pack()
+        
+    def choose_bg_color(self):
+        color = colorchooser.askcolor(color=self.button_bg_color, title="Choose Background Color")
+        if color[1]:  # color[1] is the hex value
+            self.button_bg_color = color[1]
+            self.update_color_previews()
+    
+    def choose_fg_color(self):
+        color = colorchooser.askcolor(color=self.button_fg_color, title="Choose Text Color")
+        if color[1]:  # color[1] is the hex value
+            self.button_fg_color = color[1]
+            self.update_color_previews()
+    
+    def apply_preset(self, bg_color, fg_color):
+        self.button_bg_color = bg_color
+        self.button_fg_color = fg_color
+        self.update_color_previews()
+    
+    def update_color_previews(self):
+        self.bg_color_preview.config(bg=self.button_bg_color, fg=self.button_fg_color)
+        self.fg_color_preview.config(bg=self.button_bg_color, fg=self.button_fg_color)
+        
+    def setup_timer_tab(self, parent):
+        settings = self.app.data_manager.settings_data
+        
+        # Timer Preferences
+        timer_frame = tk.LabelFrame(parent, text="Timer Preferences", font=("Arial", 12, "bold"), padx=10, pady=10)
+        timer_frame.pack(fill=tk.X, pady=(0, 20))
+        
+        # Default duration
+        duration_frame = tk.Frame(timer_frame)
+        duration_frame.pack(fill=tk.X, pady=8)
+        tk.Label(duration_frame, text="Default Duration:", font=("Arial", 11)).pack(side=tk.LEFT)
+        
+        self.default_duration_var = tk.StringVar(value=str(settings.get('timer_last_duration', 25)))
+        duration_options = ["5", "15", "25", "30", "45", "60"]
+        ttk.Combobox(duration_frame, textvariable=self.default_duration_var, values=duration_options, 
+                     state="readonly", width=10, font=("Arial", 10)).pack(side=tk.LEFT, padx=(10, 5))
+        tk.Label(duration_frame, text="minutes", font=("Arial", 11)).pack(side=tk.LEFT)
         
         # Auto-restart option
-        self.auto_restart_var = tk.BooleanVar(value=self.current_settings['timer']['auto_restart'])
-        auto_restart_cb = tk.Checkbutton(content_frame, text="Auto-restart timer after completion",
-                                        variable=self.auto_restart_var, font=("Arial", 11),
-                                        bg="#f0f0f0", activebackground="#f0f0f0")
-        auto_restart_cb.pack(anchor=tk.W, pady=10)
+        self.auto_restart_var = tk.BooleanVar(value=settings.get('auto_restart_timer', False))
+        tk.Checkbutton(timer_frame, text="Auto-restart timer after completion", 
+                       variable=self.auto_restart_var, font=("Arial", 11)).pack(anchor=tk.W, pady=8)
         
-        # Sound notification option
-        self.sound_enabled_var = tk.BooleanVar(value=self.current_settings['timer']['sound_enabled'])
-        sound_cb = tk.Checkbutton(content_frame, text="Enable sound notifications",
-                                 variable=self.sound_enabled_var, font=("Arial", 11),
-                                 bg="#f0f0f0", activebackground="#f0f0f0")
-        sound_cb.pack(anchor=tk.W, pady=5)
-    def setup_buttons(self, parent):
-        """Setup dialog action buttons"""
-        button_frame = tk.Frame(parent, bg="#f0f0f0")
-        button_frame.pack(fill=tk.X, pady=(10, 0))
+        # Alert Settings
+        alert_frame = tk.LabelFrame(parent, text="Alert Settings", font=("Arial", 12, "bold"), padx=10, pady=10)
+        alert_frame.pack(fill=tk.X)
         
-        # Cancel button
-        cancel_btn = tk.Button(button_frame, text="❌ Cancel", 
-                              command=self.cancel,
-                              bg="#95a5a6", fg="white", font=("Arial", 11, "bold"),
-                              relief=tk.FLAT, padx=20, pady=8)
-        cancel_btn.pack(side=tk.RIGHT, padx=(10, 0))
+        tk.Label(alert_frame, text="✨ When timer finishes:", font=("Arial", 11, "bold")).pack(anchor=tk.W, pady=(0, 5))
+        tk.Label(alert_frame, text="• Entire app window flashes red", font=("Arial", 10)).pack(anchor=tk.W, padx=20)
+        tk.Label(alert_frame, text="• System beep sound plays", font=("Arial", 10)).pack(anchor=tk.W, padx=20)
+        tk.Label(alert_frame, text="• Timer display shows completion message", font=("Arial", 10)).pack(anchor=tk.W, padx=20)
         
-        # Apply button
-        apply_btn = tk.Button(button_frame, text="✅ Apply Settings", 
-                             command=self.apply_settings,
-                             bg="#27ae60", fg="white", font=("Arial", 11, "bold"),
-                             relief=tk.FLAT, padx=20, pady=8)
-        apply_btn.pack(side=tk.RIGHT)
-    
-    def reset_layout_defaults(self):
-        """Reset layout settings to defaults"""
-        self.matrix_height_var.set(0.6)
-        self.notes_height_var.set(0.2)
-        self.bottom_height_var.set(0.2)
-        messagebox.showinfo("Layout Reset", "Layout settings have been reset to defaults.")
-    
-    def apply_settings(self):
-        """Apply all settings changes"""
-        try:
-            # Collect all settings
-            new_settings = {
-                'layout': {
-                    'matrix_height_ratio': self.matrix_height_var.get(),
-                    'notes_height_ratio': self.notes_height_var.get(),
-                    'bottom_height_ratio': self.bottom_height_var.get()
-                },
-                'timer_last_duration': self.timer_duration_var.get(),
-                'auto_restart_timer': self.auto_restart_var.get(),
-                'timer_sound_enabled': self.sound_enabled_var.get()
-            }
+    def save(self):
+        positions = [self.matrix_pos_var.get(), self.notes_pos_var.get(), self.bottom_pos_var.get()]
+        if len(set(positions)) != 3:
+            messagebox.showwarning("Invalid Layout", "Each component must have a unique position (top, middle, bottom).")
+            return
             
-            self.result = new_settings
-            
-            # Update the app's layout settings (for next restart)
-            if 'layout' in new_settings:
-                self.app.layout_settings.update(new_settings['layout'])
-            
-            # Save to data manager
-            self.app.data_manager.settings_data.update(new_settings)
-            self.app.data_manager.save_settings()
-            
-            messagebox.showinfo("Settings Applied", 
-                               "✅ Settings have been saved successfully!\n\n" +
-                               "Layout changes will take effect when you restart the application.")
-            
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Settings applied successfully")
-            self.dialog.destroy()
-            
-        except Exception as e:
-            messagebox.showerror("Settings Error", f"❌ Failed to apply settings:\n{str(e)}")
-            print(f"[{datetime.now().strftime('%H:%M:%S')}] Error applying settings: {e}")
-
-# Updated settings_dialog.py (additions for Outlook settings)
-"""
-Add these methods to your existing settings_dialog.py file
-"""
-
-def setup_outlook_tab(self, parent):
-    """Setup Outlook integration settings tab"""
-    outlook_frame = tk.Frame(parent, bg="#f0f0f0")
-    outlook_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
-    
-    # Sync Interval Setting
-    sync_frame = tk.LabelFrame(outlook_frame, text="Sync Frequency", 
-                              bg="#f0f0f0", font=("Arial", 10, "bold"))
-    sync_frame.pack(fill=tk.X, pady=(0, 15))
-    
-    tk.Label(sync_frame, text="Sync every:", bg="#f0f0f0", 
-            font=("Arial", 9)).pack(anchor=tk.W, padx=10, pady=(10, 5))
-    
-    # Sync interval options
-    self.sync_interval_var = tk.StringVar()
-    sync_options = [
-        ("15 minutes", "900"),
-        ("30 minutes", "1800"), 
-        ("1 hour", "3600"),
-        ("2 hours", "7200"),
-        ("4 hours", "14400")
-    ]
-    
-    for text, value in sync_options:
-        tk.Radiobutton(sync_frame, text=text, variable=self.sync_interval_var,
-                      value=value, bg="#f0f0f0", font=("Arial", 9)).pack(
-                      anchor=tk.W, padx=20, pady=2)
-    
-    # Days Ahead Setting
-    days_frame = tk.LabelFrame(outlook_frame, text="Meeting Range", 
-                              bg="#f0f0f0", font=("Arial", 10, "bold"))
-    days_frame.pack(fill=tk.X, pady=(0, 15))
-    
-    tk.Label(days_frame, text="Pull meetings for:", bg="#f0f0f0", 
-            font=("Arial", 9)).pack(anchor=tk.W, padx=10, pady=(10, 5))
-    
-    # Days ahead options
-    self.days_ahead_var = tk.StringVar()
-    days_options = [
-        ("Today only", "0"),
-        ("Today + 1 day", "1"),
-        ("Today + 2 days", "2"),
-        ("Today + 3 days", "3"),
-        ("Today + 1 week", "7")
-    ]
-    
-    for text, value in days_options:
-        tk.Radiobutton(days_frame, text=text, variable=self.days_ahead_var,
-                      value=value, bg="#f0f0f0", font=("Arial", 9)).pack(
-                      anchor=tk.W, padx=20, pady=2)
-    
-    # Manual Sync Button
-    manual_frame = tk.LabelFrame(outlook_frame, text="Manual Control", 
-                                bg="#f0f0f0", font=("Arial", 10, "bold"))
-    manual_frame.pack(fill=tk.X, pady=(0, 15))
-    
-    tk.Button(manual_frame, text="Sync Now", command=self.manual_sync,
-             bg="#4CAF50", fg="white", font=("Arial", 9, "bold"),
-             relief=tk.FLAT, padx=20, pady=5).pack(pady=10)
-    
-    # Status display
-    self.sync_status_var = tk.StringVar(value="Status: Ready")
-    tk.Label(manual_frame, textvariable=self.sync_status_var, 
-            bg="#f0f0f0", font=("Arial", 8)).pack(pady=(0, 10))
-
-def load_outlook_settings(self):
-    """Load Outlook settings into the dialog"""
-    try:
-        settings = self.settings_manager.get_settings()
+        self.result = {
+            "layout": {
+                "show_timer": self.show_timer_var.get(),
+                "show_notes": self.show_notes_var.get(),
+                "show_monitor": self.show_monitor_var.get(),
+                "matrix_position": self.matrix_pos_var.get(),
+                "notes_position": self.notes_pos_var.get(),
+                "bottom_position": self.bottom_pos_var.get()
+            },
+            "timer_last_duration": int(self.default_duration_var.get()),
+            "auto_restart_timer": self.auto_restart_var.get(),
+            # NEW: Button color settings
+            "add_task_button_bg": self.button_bg_color,
+            "add_task_button_fg": self.button_fg_color
+        }
         
-        # Set sync interval
-        sync_interval = str(settings.get('outlook_sync_interval', 3600))
-        self.sync_interval_var.set(sync_interval)
+        self.app.data_manager.settings_data.update(self.result)
+        self.app.data_manager.save_settings()
         
-        # Set days ahead
-        days_ahead = str(settings.get('outlook_days_ahead', 1))
-        self.days_ahead_var.set(days_ahead)
+        # Refresh the matrix widget to apply new button colors immediately
+        if hasattr(self.app, 'matrix_widget'):
+            self.app.matrix_widget.setup_matrix()
+            self.app.matrix_widget.load_tasks()
         
-    except Exception as e:
-        print(f"Error loading Outlook settings: {e}")
-        # Set defaults
-        self.sync_interval_var.set("3600")  # 1 hour
-        self.days_ahead_var.set("1")  # 1 day ahead
-
-def save_outlook_settings(self):
-    """Save Outlook settings"""
-    try:
-        settings = self.settings_manager.get_settings()
+        messagebox.showinfo("Settings Saved", "Settings saved successfully!\n\nButton colors have been updated immediately.\nLayout changes will take effect after restarting the application.")
+        self.dialog.destroy()
         
-        # Update Outlook settings
-        settings['outlook_sync_interval'] = int(self.sync_interval_var.get())
-        settings['outlook_days_ahead'] = int(self.days_ahead_var.get())
-        
-        self.settings_manager.save_settings(settings)
-        
-        # Restart sync with new settings if outlook integration exists
-        if hasattr(self.parent, 'outlook_sync'):
-            self.parent.outlook_sync.stop_periodic_sync()
-            self.parent.outlook_sync.start_periodic_sync()
-            
-        return True
-        
-    except Exception as e:
-        print(f"Error saving Outlook settings: {e}")
-        return False
-
-def manual_sync(self):
-    """Trigger manual Outlook sync"""
-    try:
-        if hasattr(self.parent, 'outlook_sync'):
-            self.sync_status_var.set("Status: Syncing...")
-            self.parent.outlook_sync.manual_sync()
-            # Update status after a delay
-            self.parent.after(2000, lambda: self.sync_status_var.set("Status: Sync completed"))
-        else:
-            self.sync_status_var.set("Status: Outlook not connected")
-    except Exception as e:
-        self.sync_status_var.set(f"Status: Error - {str(e)}")
-
+    def cancel(self):
+        self.dialog.destroy()

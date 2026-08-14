@@ -1,12 +1,17 @@
 {
-  "timer_last_duration": 20,
+  "timer_last_duration": 30,
   "auto_restart_timer": true,
-  "outlook_sync_enabled": true,
+  "outlook_sync_enabled": false,
   "outlook_last_sync": null,
   "layout": {
-    "matrix_height_ratio": 0.6,
-    "notes_height_ratio": 0.1,
-    "bottom_height_ratio": 0.3
+    "show_timer": true,
+    "show_notes": true,
+    "show_monitor": true,
+    "matrix_position": "top",
+    "notes_position": "middle",
+    "bottom_position": "bottom"
   },
-  "timer_sound_enabled": true
+  "timer_sound_enabled": true,
+  "add_task_button_bg": "#333333",
+  "add_task_button_fg": "#ffffff"
 }

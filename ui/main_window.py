@@ -1,32 +1,14 @@
-"""
-Main Application Window for Eisenhower Matrix To-Do App
-
-WHAT THIS SCRIPT DOES:
-- Creates the main Tkinter application window
-- Builds the Eisenhower Matrix layout (matrix, notes, timer, monitor)
-- Loads task and note data
-- Starts system monitoring in a background thread
-- Integrates Outlook calendar safely (optional, non-breaking)
-- Handles clean shutdown of background processes
-
-HOW TO RUN:
-1. From your project root directory:
-   python3 main.py
-
-2. Make sure dependencies are installed:
-   python3 -m pip install -r requirements.txt
-
-NOTES:
-- Outlook integration will NOT crash the app if it fails
-- Integration only runs after all components are initialized
-"""
-
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime, timedelta
 import threading
 import time
 import psutil
+import os
+import sys
+
+# Add current directory to path to allow importing local modules
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))
 
 
 class EisenhowerMatrixApp:
@@ -35,88 +17,71 @@ class EisenhowerMatrixApp:
         self.root.title("Eisenhower Matrix - Task Manager")
         self.root.geometry("1400x900")
 
-        print("Initializing application...")
+        try:
+            from data.data_manager import DataManager
+            self.data_manager = DataManager()
+        except ImportError:
+            sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+            from data.data_manager import DataManager
+            self.data_manager = DataManager()
 
-        # Initialize data manager
-        from data.data_manager import DataManager
-        self.data_manager = DataManager()
-
-        # Core state
         self.current_date = datetime.now().date()
         self.monitoring = True
-
-        # Timer state
         self.timer_running = False
-        self.timer_seconds = 0
-        self.timer_thread = None
-
-        # Outlook integration
         self.outlook_sync = None
 
-        # Layout settings
-        self.layout_settings = {
-            "matrix_height_ratio": 0.55,
-            "notes_height_ratio": 0.15,
-            "bottom_height_ratio": 0.30
-        }
-
-        # Build application
         self.setup_ui()
         self.load_data()
         self.bind_keys()
-        self.start_system_monitoring()
 
-        # Initialize Outlook LAST (important)
-        self.initialize_outlook_integration()
-
-        print("Application initialized successfully")
+        settings = self.data_manager.settings_data.get('layout', {})
+        if settings.get('show_monitor', True):
+            self.start_system_monitoring()
 
     def setup_ui(self):
-        print("Setting up UI...")
+        self.main_frame = tk.Frame(self.root, bg="#f0f0f0")
+        self.main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        main_frame = tk.Frame(self.root, bg="#f0f0f0")
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        self.setup_header(self.main_frame)
 
-        self.setup_header(main_frame)
+        self.content_frame = tk.Frame(self.main_frame, bg="#f0f0f0")
+        self.content_frame.pack(fill=tk.BOTH, expand=True, pady=10)
 
-        content_frame = tk.Frame(main_frame, bg="#f0f0f0")
-        content_frame.pack(fill=tk.BOTH, expand=True, pady=10)
+        settings = self.data_manager.settings_data.get('layout', {})
 
-        total_height = 700
+        self.matrix_frame = tk.Frame(self.content_frame, bg="#f0f0f0")
+        self.notes_frame = tk.Frame(self.content_frame, bg="#f0f0f0", height=150)
+        self.bottom_frame = tk.Frame(self.content_frame, bg="#f0f0f0", height=200)
 
-        matrix_height = int(total_height * self.layout_settings["matrix_height_ratio"])
-        notes_height = int(total_height * self.layout_settings["notes_height_ratio"])
-        bottom_height = int(total_height * self.layout_settings["bottom_height_ratio"])
+        self.notes_frame.pack_propagate(False)
+        self.bottom_frame.pack_propagate(False)
 
-        # Matrix
-        self.matrix_frame = tk.Frame(content_frame, height=matrix_height)
-        self.matrix_frame.pack(fill=tk.BOTH, expand=True)
-        self.matrix_frame.pack_propagate(False)
+        show_notes = settings.get('show_notes', True)
+        show_bottom = settings.get('show_timer', True) or settings.get('show_monitor', True)
+
+        if show_bottom:
+            self.bottom_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+        if show_notes:
+            self.notes_frame.pack(side=tk.BOTTOM, fill=tk.X, pady=5)
+
+        self.matrix_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=5)
 
         self.setup_matrix()
 
-        # Notes
-        notes_frame = tk.Frame(content_frame, height=notes_height)
-        notes_frame.pack(fill=tk.X, pady=(10, 5))
-        notes_frame.pack_propagate(False)
+        if show_notes:
+            self.setup_notes(self.notes_frame)
 
-        self.setup_notes(notes_frame)
+        if show_bottom:
+            if settings.get('show_timer', True):
+                self.timer_frame = tk.Frame(self.bottom_frame, bg="#f0f0f0")
+                self.timer_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
+                self.setup_timer(self.timer_frame)
 
-        # Bottom
-        bottom_frame = tk.Frame(content_frame, height=bottom_height)
-        bottom_frame.pack(fill=tk.X)
-        bottom_frame.pack_propagate(False)
-
-        timer_frame = tk.Frame(bottom_frame)
-        timer_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
-        monitor_frame = tk.Frame(bottom_frame)
-        monitor_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
-
-        self.setup_timer(timer_frame)
-        self.setup_system_monitor(monitor_frame)
-
-        print("UI setup complete")
+            if settings.get('show_monitor', True):
+                self.monitor_frame = tk.Frame(self.bottom_frame, bg="#f0f0f0")
+                self.monitor_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(5, 0))
+                self.setup_system_monitor(self.monitor_frame)
 
     def setup_header(self, parent):
         header = tk.Frame(parent, bg="#2c3e50", height=60)
@@ -126,80 +91,108 @@ class EisenhowerMatrixApp:
         nav = tk.Frame(header, bg="#2c3e50")
         nav.pack(side=tk.LEFT, padx=20, pady=15)
 
-        tk.Button(nav, text="◀", command=self.prev_day).pack(side=tk.LEFT)
+        btn_prev = tk.Button(nav, text="◀", command=self.prev_day, cursor="hand2")
+        btn_prev.grid(row=0, column=0)
 
-        self.date_label = tk.Label(nav, fg="white", bg="#2c3e50")
-        self.date_label.pack(side=tk.LEFT, padx=10)
-
-        tk.Button(nav, text="▶", command=self.next_day).pack(side=tk.LEFT)
-
-        tk.Button(header, text="Settings", command=self.open_settings).pack(
-            side=tk.RIGHT, padx=20
+        self.date_label = tk.Label(
+            nav,
+            fg="white",
+            bg="#2c3e50",
+            font=("Arial", 12, "bold"),
+            width=35,
+            anchor="center"
         )
+        self.date_label.grid(row=0, column=1, padx=10)
+
+        btn_next = tk.Button(nav, text="▶", command=self.next_day, cursor="hand2")
+        btn_next.grid(row=0, column=2)
+
+        btn_today = tk.Button(nav, text="Today", command=self.go_today, cursor="hand2", padx=10)
+        btn_today.grid(row=0, column=3, padx=(15, 0))
+
+        tk.Button(
+            header,
+            text="⚙️ Settings",
+            command=self.open_settings,
+            cursor="hand2",
+            padx=10
+        ).pack(side=tk.RIGHT, padx=20)
 
         self.update_date_display()
 
     def setup_matrix(self):
-        from ui.components.matrix_widget import MatrixWidget
-        self.matrix_widget = MatrixWidget(self.matrix_frame, self)
+        try:
+            from ui.components.matrix_widget import MatrixWidget
+            self.matrix_widget = MatrixWidget(self.matrix_frame, self)
+        except Exception as e:
+            tk.Label(
+                self.matrix_frame,
+                text=f"Error loading matrix widget: {e}",
+                fg="red",
+                bg="#f0f0f0"
+            ).pack(pady=20)
 
     def setup_timer(self, parent):
-        from ui.components.timer_widget import TimerWidget
-        self.timer_widget = TimerWidget(parent, self)
+        try:
+            from ui.components.timer_widget import TimerWidget
+            self.timer_widget = TimerWidget(parent, self)
+        except Exception as e:
+            tk.Label(parent, text=f"Timer Widget Error:\n{e}", fg="red", bg="#f0f0f0").pack(pady=20)
 
     def setup_system_monitor(self, parent):
-        from ui.components.monitor_widget import MonitorWidget
-        self.monitor_widget = MonitorWidget(parent, self)
+        try:
+            from ui.components.monitor_widget import MonitorWidget
+            self.monitor_widget = MonitorWidget(parent, self)
+        except Exception as e:
+            tk.Label(parent, text=f"Monitor Widget Error:\n{e}", fg="red", bg="#f0f0f0").pack(pady=20)
 
     def setup_notes(self, parent):
-        from ui.components.notes_widget import NotesWidget
-        self.notes_widget = NotesWidget(parent, self)
-
-    def initialize_outlook_integration(self):
-        print("Initializing Outlook integration...")
-
         try:
-            from outlook_integration import OutlookCalendarSync
-
-            self.outlook_sync = OutlookCalendarSync(
-                data_manager=self.data_manager,
-                matrix_widget=self.matrix_widget
-            )
-
-            if hasattr(self.outlook_sync, "start_periodic_sync"):
-                self.outlook_sync.start_periodic_sync()
-
-            print("Outlook integration ready")
-
+            from ui.components.notes_widget import NotesWidget
+            self.notes_widget = NotesWidget(parent, self)
         except Exception as e:
-            print("Outlook integration failed:", str(e))
-            self.outlook_sync = None
+            tk.Label(parent, text=f"Notes Widget Error:\n{e}", fg="red", bg="#f0f0f0").pack(pady=20)
 
     def open_settings(self):
-        from ui.settings_dialog import SettingsDialog
-        dialog = SettingsDialog(self.root, self)
-        self.root.wait_window(dialog.dialog)
+        try:
+            from ui.settings_dialog import SettingsDialog
+            dialog = SettingsDialog(self.root, self)
+            self.root.wait_window(dialog.dialog)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not load settings dialog: {e}")
 
-        if dialog.result:
-            self.data_manager.settings_data.update(dialog.result)
-            self.data_manager.save_settings()
+    def _change_date(self, new_date):
+        """Centralized date change handler that protects unsaved notes."""
+        if hasattr(self, "notes_widget"):
+            if not self.notes_widget.check_unsaved_changes():
+                return
+
+        self.current_date = new_date
+        self.refresh_data()
+
+    def go_today(self):
+        self._change_date(datetime.now().date())
 
     def prev_day(self):
-        self.current_date -= timedelta(days=1)
-        self.refresh_data()
+        self._change_date(self.current_date - timedelta(days=1))
 
     def next_day(self):
-        self.current_date += timedelta(days=1)
-        self.refresh_data()
+        self._change_date(self.current_date + timedelta(days=1))
 
     def update_date_display(self):
-        self.date_label.config(
-            text=self.current_date.strftime("%A, %B %d, %Y")
-        )
+        date_str = self.current_date.strftime("%A, %B %d, %Y")
+        if self.current_date == datetime.now().date():
+            date_str += " (Today)"
+        self.date_label.config(text=date_str)
 
     def refresh_data(self):
         self.update_date_display()
-        self.load_data()
+
+        if hasattr(self, "matrix_widget"):
+            self.matrix_widget.load_tasks()
+
+        if hasattr(self, "notes_widget"):
+            self.notes_widget.load_notes()
 
     def load_data(self):
         if hasattr(self, "matrix_widget"):
@@ -213,16 +206,15 @@ class EisenhowerMatrixApp:
                 try:
                     cpu = psutil.cpu_percent(interval=1)
                     mem = psutil.virtual_memory().percent
+                    current_time = datetime.now().strftime("%I:%M:%S %p")
 
-                    if hasattr(self, "monitor_widget"):
+                    if hasattr(self, "monitor_widget") and hasattr(self.monitor_widget, "update_stats"):
                         self.root.after(
                             0,
-                            lambda: self.monitor_widget.update_stats(
-                                cpu, mem, datetime.now().strftime("%H:%M:%S")
-                            )
+                            lambda: self.monitor_widget.update_stats(cpu, mem, current_time)
                         )
                 except Exception:
-                    continue
+                    pass
 
         self.monitor_thread = threading.Thread(target=monitor, daemon=True)
         self.monitor_thread.start()
@@ -232,19 +224,15 @@ class EisenhowerMatrixApp:
         self.root.bind("<Right>", lambda e: self.next_day())
 
     def on_closing(self):
-        print("Shutting down application...")
-
+        try:
+            if hasattr(self, "notes_widget") and self.notes_widget.unsaved_changes:
+                self.notes_widget.save_notes(silent=True)
+        except Exception as e:
+            print(f"Error auto-saving notes on close: {e}")
+    
         self.monitoring = False
         self.timer_running = False
-
-        if self.outlook_sync:
-            try:
-                if hasattr(self.outlook_sync, "cleanup"):
-                    self.outlook_sync.cleanup()
-            except Exception as e:
-                print("Outlook cleanup error:", str(e))
-
         time.sleep(0.1)
-
         self.root.quit()
         self.root.destroy()
+

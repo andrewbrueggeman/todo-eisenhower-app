@@ -2,47 +2,34 @@
 Outlook Calendar Integration Module
 
 WHAT THIS SCRIPT DOES:
-- Connects to the local Outlook desktop application
-- Reads accepted meetings from the default Outlook calendar
-- Converts meetings into Eisenhower Matrix tasks
-- Supports periodic background synchronization
-- Works even if no dedicated settings_manager exists
-- Can also be run directly from the command line for a quick self-test
+- Provides a safe Outlook calendar integration wrapper for the Eisenhower Matrix app
+- Detects the operating system before attempting Outlook integration
+- Uses Windows Outlook COM only when running on Windows
+- Clearly reports that Mac/Linux need Microsoft Graph integration
+- Keeps the same OutlookCalendarSync class interface used by ui/main_window.py
+- Can be run directly from the command line for a self-test
 
-HOW TO USE IN YOUR APP:
-- Import OutlookCalendarSync from this module
-- Initialize it from ui/main_window.py like this:
+HOW TO RUN:
+1. From your project root directory:
+   python3 outlook_integration.py --self-test
 
-    self.outlook_sync = OutlookCalendarSync(
-        data_manager=self.data_manager,
-        matrix_widget=self.matrix_widget
-    )
+2. Optional arguments:
+   python3 outlook_integration.py --self-test --days-ahead 2
+   python3 outlook_integration.py --self-test --sync-interval 1800
 
-- Because settings_manager is optional, this fixes your current startup error
-
-HOW TO RUN A QUICK SELF-TEST FROM TERMINAL:
-- From your project root directory:
-    python3 outlook_integration.py --self-test
-
-OPTIONAL SELF-TEST ARGUMENTS:
-- --days-ahead 2
-- --sync-interval 1800
-
-NOTES:
-- This script only reads accepted meetings
-- Meetings are added as Quadrant 1 tasks by default
-- Outlook connection is opened and closed safely inside each sync call
+IMPORTANT:
+- Windows Outlook desktop automation requires Windows and the Outlook desktop app
+- Mac/Linux cannot use win32com or pythoncom
+- For Mac/Linux calendar sync, this file should later be upgraded to Microsoft Graph
 """
 
 import argparse
 import datetime
 import logging
+import platform
 import threading
 import time
 from typing import Any, Dict, List, Optional
-
-import pythoncom
-import win32com.client
 
 
 class OutlookCalendarSync:
@@ -56,14 +43,8 @@ class OutlookCalendarSync:
     ):
         """
         Initialize Outlook calendar synchronization.
-
-        Args:
-            data_manager: App data manager used for reading and writing tasks
-            matrix_widget: UI widget used to refresh the matrix after sync
-            settings_manager: Optional settings manager with get_settings()
-            sync_interval: Optional override for sync interval in seconds
-            days_ahead: Optional override for how many days ahead to sync
         """
+
         self.data_manager = data_manager
         self.matrix_widget = matrix_widget
         self.settings_manager = settings_manager
@@ -77,21 +58,37 @@ class OutlookCalendarSync:
         self.sync_interval_override = sync_interval
         self.days_ahead_override = days_ahead
 
+        self.os_name = platform.system()
+
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
 
-        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Outlook integration initialized")
+        print(f"[{self._timestamp()}] Outlook integration initialized")
+        print(f"[{self._timestamp()}] Detected operating system: {self.os_name}")
+
+        if not self._is_windows():
+            print(f"[{self._timestamp()}] Windows Outlook COM integration is not available on this operating system")
+            print(f"[{self._timestamp()}] Microsoft Graph integration is required for Mac/Linux calendar sync")
+
+    def _timestamp(self) -> str:
+        """
+        Return a consistent timestamp for console messages.
+        """
+
+        return datetime.datetime.now().strftime("%H:%M:%S")
+
+    def _is_windows(self) -> bool:
+        """
+        Return True when the app is running on Windows.
+        """
+
+        return self.os_name == "Windows"
 
     def get_sync_settings(self) -> Dict[str, int]:
         """
         Resolve sync configuration from the best available source.
-
-        Priority:
-        1. Constructor overrides
-        2. settings_manager.get_settings()
-        3. data_manager.settings_data
-        4. Defaults
         """
+
         settings = {
             "sync_interval": self.default_sync_interval,
             "days_ahead": self.default_days_ahead,
@@ -100,6 +97,7 @@ class OutlookCalendarSync:
         try:
             if self.settings_manager and hasattr(self.settings_manager, "get_settings"):
                 loaded_settings = self.settings_manager.get_settings()
+
                 if isinstance(loaded_settings, dict):
                     settings["sync_interval"] = int(
                         loaded_settings.get("outlook_sync_interval", settings["sync_interval"])
@@ -122,6 +120,7 @@ class OutlookCalendarSync:
                             settings["days_ahead"],
                         )
                     )
+
         except Exception as e:
             self.logger.warning(f"Could not read Outlook sync settings: {e}")
 
@@ -135,22 +134,29 @@ class OutlookCalendarSync:
 
     def connect_to_outlook(self):
         """
-        Connect to Outlook and return the namespace and calendar folder.
-
-        Returns:
-            tuple(namespace, calendar) if successful, otherwise (None, None)
+        Connect to local Outlook desktop through Windows COM.
         """
+
+        if not self._is_windows():
+            print(f"[{self._timestamp()}] Skipping Outlook COM connection because this is not Windows")
+            return None, None
+
         try:
+            import pythoncom
+            import win32com.client
+
+            pythoncom.CoInitialize()
+
             outlook_app = win32com.client.Dispatch("Outlook.Application")
             namespace = outlook_app.GetNamespace("MAPI")
             calendar = namespace.GetDefaultFolder(9)
 
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Connected to Outlook successfully")
+            print(f"[{self._timestamp()}] Connected to Outlook desktop successfully")
             return namespace, calendar
 
         except Exception as e:
-            self.logger.error(f"Failed to connect to Outlook: {str(e)}")
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Failed to connect to Outlook: {str(e)}")
+            self.logger.error(f"Failed to connect to Outlook desktop: {str(e)}")
+            print(f"[{self._timestamp()}] Failed to connect to Outlook desktop: {str(e)}")
             return None, None
 
     def get_accepted_meetings(
@@ -160,22 +166,22 @@ class OutlookCalendarSync:
     ) -> List[Dict[str, Any]]:
         """
         Retrieve accepted meetings from Outlook calendar for the given date range.
-
-        Args:
-            start_date: Beginning of date range
-            end_date: End of date range
-
-        Returns:
-            A list of meeting dictionaries
         """
+
         meetings: List[Dict[str, Any]] = []
 
+        if not self._is_windows():
+            print(f"[{self._timestamp()}] Calendar sync is not available through win32com on this operating system")
+            print(f"[{self._timestamp()}] Next step: replace this backend with Microsoft Graph")
+            return meetings
+
         try:
-            pythoncom.CoInitialize()
+            import pythoncom
 
             namespace, calendar = self.connect_to_outlook()
+
             if not namespace or not calendar:
-                return []
+                return meetings
 
             start_datetime = datetime.datetime.combine(start_date, datetime.time.min)
             end_datetime = datetime.datetime.combine(end_date, datetime.time.max)
@@ -198,6 +204,7 @@ class OutlookCalendarSync:
             for appointment in filtered_appointments:
                 try:
                     response_status = getattr(appointment, "ResponseStatus", None)
+
                     if response_status != 3:
                         continue
 
@@ -225,15 +232,14 @@ class OutlookCalendarSync:
 
                 except Exception as item_error:
                     self.logger.warning(f"Error processing appointment: {item_error}")
-                    continue
 
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Found {len(meetings)} accepted meetings")
+            print(f"[{self._timestamp()}] Found {len(meetings)} accepted meetings")
             return meetings
 
         except Exception as e:
             self.logger.error(f"Error retrieving meetings: {str(e)}")
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Error retrieving meetings: {str(e)}")
-            return []
+            print(f"[{self._timestamp()}] Error retrieving meetings: {str(e)}")
+            return meetings
 
         finally:
             try:
@@ -245,17 +251,18 @@ class OutlookCalendarSync:
         """
         Build the task text shown inside the matrix.
         """
-        line_break = chr(10)
+
         return (
             f"📅 {meeting['title']}"
-            f"{line_break}⏰ {meeting['start_time']}"
-            f"{line_break}📍 {meeting['location']}"
+            f"{chr(10)}⏰ {meeting['start_time']}"
+            f"{chr(10)}📍 {meeting['location']}"
         )
 
     def _refresh_ui(self):
         """
         Refresh the matrix widget safely if available.
         """
+
         if not self.matrix_widget:
             return
 
@@ -265,15 +272,28 @@ class OutlookCalendarSync:
                     self.matrix_widget.after(0, self.matrix_widget.refresh_current_day)
                 else:
                     self.matrix_widget.refresh_current_day()
+
+            elif hasattr(self.matrix_widget, "load_tasks"):
+                if hasattr(self.matrix_widget, "after"):
+                    self.matrix_widget.after(0, self.matrix_widget.load_tasks)
+                else:
+                    self.matrix_widget.load_tasks()
+
         except Exception as e:
             self.logger.warning(f"Could not refresh matrix widget: {e}")
 
     def sync_meetings_to_tasks(self):
         """
-        Sync Outlook meetings into the app's task system.
+        Sync Outlook meetings into the app task system.
         """
+
         if not self.data_manager:
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] No data manager available, skipping task sync")
+            print(f"[{self._timestamp()}] No data manager available, skipping task sync")
+            return
+
+        if not self._is_windows():
+            print(f"[{self._timestamp()}] Outlook desktop sync skipped")
+            print(f"[{self._timestamp()}] This machine needs Microsoft Graph calendar sync instead of Windows COM")
             return
 
         try:
@@ -282,21 +302,19 @@ class OutlookCalendarSync:
             today = datetime.date.today()
             end_date = today + datetime.timedelta(days=settings["days_ahead"])
 
-            print(
-                f"[{datetime.datetime.now().strftime('%H:%M:%S')}] "
-                f"Syncing meetings from {today} to {end_date}"
-            )
+            print(f"[{self._timestamp()}] Syncing meetings from {today} to {end_date}")
 
             meetings = self.get_accepted_meetings(today, end_date)
 
             if not meetings:
-                print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] No accepted meetings found")
+                print(f"[{self._timestamp()}] No accepted meetings found")
                 return
 
             synced_count = 0
 
             for meeting in meetings:
                 existing_tasks = self.data_manager.get_tasks_by_date(meeting["date"])
+
                 if not isinstance(existing_tasks, list):
                     existing_tasks = []
 
@@ -326,17 +344,18 @@ class OutlookCalendarSync:
                 self.data_manager.add_task(meeting["date"], task_data)
                 synced_count += 1
 
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Synced {synced_count} new meetings")
+            print(f"[{self._timestamp()}] Synced {synced_count} new meetings")
             self._refresh_ui()
 
         except Exception as e:
             self.logger.error(f"Error during meeting sync: {str(e)}")
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Sync failed: {str(e)}")
+            print(f"[{self._timestamp()}] Sync failed: {str(e)}")
 
     def _sync_worker(self):
         """
         Worker thread for periodic synchronization.
         """
+
         self.sync_meetings_to_tasks()
 
         while not self.stop_sync:
@@ -345,12 +364,13 @@ class OutlookCalendarSync:
                 sync_interval = int(settings["sync_interval"])
 
                 elapsed = 0
+
                 while elapsed < sync_interval and not self.stop_sync:
                     time.sleep(10)
                     elapsed += 10
 
                 if not self.stop_sync:
-                    print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Running scheduled sync")
+                    print(f"[{self._timestamp()}] Running scheduled sync")
                     self.sync_meetings_to_tasks()
 
             except Exception as e:
@@ -361,38 +381,42 @@ class OutlookCalendarSync:
         """
         Start periodic background synchronization.
         """
+
         if self.sync_thread and self.sync_thread.is_alive():
-            print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Sync thread already running")
+            print(f"[{self._timestamp()}] Sync thread already running")
             return
 
         self.stop_sync = False
         self.sync_thread = threading.Thread(target=self._sync_worker, daemon=True)
         self.sync_thread.start()
 
-        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Periodic sync started")
+        print(f"[{self._timestamp()}] Periodic sync started")
 
     def stop_periodic_sync(self):
         """
         Stop periodic background synchronization.
         """
+
         self.stop_sync = True
 
         if self.sync_thread and self.sync_thread.is_alive():
             self.sync_thread.join(timeout=5)
 
-        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Periodic sync stopped")
+        print(f"[{self._timestamp()}] Periodic sync stopped")
 
     def manual_sync(self):
         """
         Run a one-time manual sync in a background thread.
         """
-        print(f"[{datetime.datetime.now().strftime('%H:%M:%S')}] Manual sync triggered")
+
+        print(f"[{self._timestamp()}] Manual sync triggered")
         threading.Thread(target=self.sync_meetings_to_tasks, daemon=True).start()
 
     def cleanup(self):
         """
         Clean up resources on application shutdown.
         """
+
         self.stop_periodic_sync()
 
 
@@ -400,16 +424,23 @@ def run_self_test(days_ahead: int):
     """
     Command-line self-test for Outlook connectivity and meeting retrieval.
     """
+
     sync = OutlookCalendarSync(days_ahead=days_ahead)
 
     today = datetime.date.today()
     end_date = today + datetime.timedelta(days=days_ahead)
 
+    print("---- SELF TEST START ----")
+    print(f"Date range: {today} to {end_date}")
+    print(f"Operating system: {platform.system()}")
+
     meetings = sync.get_accepted_meetings(today, end_date)
 
     print("---- SELF TEST RESULT ----")
-    print(f"Date range: {today} to {end_date}")
     print(f"Accepted meetings found: {len(meetings)}")
+
+    if not meetings:
+        print("No meetings were returned by the current integration backend")
 
     for index, meeting in enumerate(meetings[:10], start=1):
         print(
@@ -422,35 +453,47 @@ def run_self_test(days_ahead: int):
 
 
 def parse_args():
+    """
+    Parse command-line arguments.
+    """
+
     parser = argparse.ArgumentParser(description="Outlook calendar integration helper")
+
     parser.add_argument(
         "--self-test",
         action="store_true",
         help="Run a standalone Outlook connectivity and meeting retrieval test",
     )
+
     parser.add_argument(
         "--days-ahead",
         type=int,
         default=1,
         help="Number of days ahead to inspect during self-test",
     )
+
     parser.add_argument(
         "--sync-interval",
         type=int,
         default=3600,
         help="Optional sync interval override in seconds",
     )
+
     return parser.parse_args()
 
 
 def main():
+    """
+    Main command-line entry point.
+    """
+
     args = parse_args()
 
     if args.self_test:
         run_self_test(days_ahead=args.days_ahead)
     else:
-        print("This module is normally imported by the main application.")
-        print("Use --self-test if you want to verify Outlook access from the command line.")
+        print("This module is normally imported by the main application")
+        print("Use --self-test if you want to verify Outlook access from the command line")
 
 
 if __name__ == "__main__":
