@@ -1,101 +1,94 @@
-"""
-System Monitor Widget
-
-Displays real-time system resource usage including CPU, memory, and time.
-"""
-
 import tkinter as tk
 from datetime import datetime
+import psutil
 
 class MonitorWidget:
     def __init__(self, parent, app):
         self.parent = parent
         self.app = app
-        
         self.setup_monitor()
-        print(f"[{datetime.now().strftime('%H:%M:%S')}] Monitor widget initialized")
     
     def setup_monitor(self):
-        """Setup system monitor UI"""
-        monitor_frame = tk.LabelFrame(self.parent, text="System Monitor", 
-                                     font=("Arial", 12, "bold"),
-                                     bg="#f0f0f0", padx=10, pady=10)
-        monitor_frame.pack(fill=tk.BOTH, expand=True)
+        # Main container
+        monitor_container = tk.Frame(self.parent, bg="#f0f0f0", relief=tk.RAISED, bd=2)
+        monitor_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # CPU usage
-        cpu_frame = tk.Frame(monitor_frame, bg="#f0f0f0")
-        cpu_frame.pack(fill=tk.X, pady=2)
+        # Title
+        tk.Label(monitor_container, text="🖥️ System Monitor", font=("Arial", 14, "bold"), bg="#f0f0f0").pack(pady=(10, 5))
         
-        tk.Label(cpu_frame, text="CPU:", font=("Arial", 10, "bold"), 
-                bg="#f0f0f0", width=8, anchor=tk.W).pack(side=tk.LEFT)
+        # Stats frame
+        stats_frame = tk.Frame(monitor_container, bg="#f0f0f0")
+        stats_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=10)
         
-        self.cpu_label = tk.Label(cpu_frame, text="0.0%", 
-                                 font=("Arial", 10), bg="#f0f0f0", fg="#3498db")
-        self.cpu_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # CPU Usage
+        cpu_frame = tk.Frame(stats_frame, bg="#f0f0f0")
+        cpu_frame.pack(fill=tk.X, pady=5)
         
-        # Memory usage
-        memory_frame = tk.Frame(monitor_frame, bg="#f0f0f0")
-        memory_frame.pack(fill=tk.X, pady=2)
+        tk.Label(cpu_frame, text="CPU:", font=("Arial", 11, "bold"), bg="#f0f0f0", width=8, anchor="w").pack(side=tk.LEFT)
+        self.cpu_label = tk.Label(cpu_frame, text="0.0%", font=("Arial", 11), bg="#f0f0f0", fg="#2c3e50")
+        self.cpu_label.pack(side=tk.LEFT)
         
-        tk.Label(memory_frame, text="Memory:", font=("Arial", 10, "bold"), 
-                bg="#f0f0f0", width=8, anchor=tk.W).pack(side=tk.LEFT)
+        self.cpu_bar = tk.Canvas(cpu_frame, height=15, bg="white", relief=tk.SUNKEN, bd=1)
+        self.cpu_bar.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
         
-        self.memory_label = tk.Label(memory_frame, text="0.0%", 
-                                    font=("Arial", 10), bg="#f0f0f0", fg="#e74c3c")
-        self.memory_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Memory Usage
+        mem_frame = tk.Frame(stats_frame, bg="#f0f0f0")
+        mem_frame.pack(fill=tk.X, pady=5)
         
-        # Current time
-        time_frame = tk.Frame(monitor_frame, bg="#f0f0f0")
-        time_frame.pack(fill=tk.X, pady=2)
+        tk.Label(mem_frame, text="Memory:", font=("Arial", 11, "bold"), bg="#f0f0f0", width=8, anchor="w").pack(side=tk.LEFT)
+        self.mem_label = tk.Label(mem_frame, text="0.0%", font=("Arial", 11), bg="#f0f0f0", fg="#2c3e50")
+        self.mem_label.pack(side=tk.LEFT)
         
-        tk.Label(time_frame, text="Time:", font=("Arial", 10, "bold"), 
-                bg="#f0f0f0", width=8, anchor=tk.W).pack(side=tk.LEFT)
+        self.mem_bar = tk.Canvas(mem_frame, height=15, bg="white", relief=tk.SUNKEN, bd=1)
+        self.mem_bar.pack(side=tk.RIGHT, fill=tk.X, expand=True, padx=(10, 0))
         
-        self.time_label = tk.Label(time_frame, text="--:--:--", 
-                                  font=("Arial", 10), bg="#f0f0f0", fg="#27ae60")
-        self.time_label.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        # Current Time
+        time_frame = tk.Frame(stats_frame, bg="#f0f0f0")
+        time_frame.pack(fill=tk.X, pady=5)
         
-        # Status indicator
-        self.status_label = tk.Label(monitor_frame, text="Monitoring active", 
-                                    font=("Arial", 8), bg="#f0f0f0", fg="#7f8c8d")
-        self.status_label.pack(pady=2)
-    
-    def update_stats(self, cpu_percent, memory_percent, current_time):
-        """Update system statistics display"""
+        tk.Label(time_frame, text="Time:", font=("Arial", 11, "bold"), bg="#f0f0f0", width=8, anchor="w").pack(side=tk.LEFT)
+        self.time_label = tk.Label(time_frame, text="00:00:00", font=("Arial", 11), bg="#f0f0f0", fg="#2c3e50")
+        self.time_label.pack(side=tk.LEFT)
+        
+        # System Info
+        info_frame = tk.Frame(stats_frame, bg="#f0f0f0")
+        info_frame.pack(fill=tk.X, pady=(15, 5))
+        
         try:
-            # Check if widgets still exist before updating
-            if not hasattr(self, 'cpu_label') or not self.cpu_label.winfo_exists():
-                return
-            
-            # Update CPU with color coding
-            self.cpu_label.config(text=f"{cpu_percent:.1f}%")
-            if cpu_percent > 80:
-                self.cpu_label.config(fg="#e74c3c")  # Red for high usage
-            elif cpu_percent > 60:
-                self.cpu_label.config(fg="#f39c12")  # Orange for medium usage
-            else:
-                self.cpu_label.config(fg="#3498db")  # Blue for normal usage
-            
-            # Update Memory with color coding
-            if hasattr(self, 'memory_label') and self.memory_label.winfo_exists():
-                self.memory_label.config(text=f"{memory_percent:.1f}%")
-                if memory_percent > 85:
-                    self.memory_label.config(fg="#e74c3c")  # Red for high usage
-                elif memory_percent > 70:
-                    self.memory_label.config(fg="#f39c12")  # Orange for medium usage
-                else:
-                    self.memory_label.config(fg="#27ae60")  # Green for normal usage
-            
-            # Update time - Convert to 12-hour format
-            if hasattr(self, 'time_label') and self.time_label.winfo_exists():
-                from datetime import datetime
-                time_obj = datetime.strptime(current_time, "%H:%M:%S")
-                formatted_time = time_obj.strftime("%I:%M:%S %p")
-                self.time_label.config(text=formatted_time)
-                
-        except tk.TclError:
-            # Widget has been destroyed, stop trying to update
-            return
-        except Exception as e:
-            # Any other error, just return silently
-            return
+            cpu_count = psutil.cpu_count()
+            total_mem = psutil.virtual_memory().total / (1024**3)  # GB
+            tk.Label(info_frame, text=f"Cores: {cpu_count} | RAM: {total_mem:.1f}GB", 
+                    font=("Arial", 9), bg="#f0f0f0", fg="#7f8c8d").pack()
+        except:
+            tk.Label(info_frame, text="System info unavailable", 
+                    font=("Arial", 9), bg="#f0f0f0", fg="#7f8c8d").pack()
+    
+    def update_stats(self, cpu_percent, mem_percent, current_time):
+        # Update text labels
+        self.cpu_label.config(text=f"{cpu_percent:.1f}%")
+        self.mem_label.config(text=f"{mem_percent:.1f}%")
+        self.time_label.config(text=current_time)
+        
+        # Update CPU bar
+        self.cpu_bar.delete("all")
+        bar_width = self.cpu_bar.winfo_width()
+        if bar_width > 1:
+            cpu_width = (cpu_percent / 100) * bar_width
+            color = self._get_usage_color(cpu_percent)
+            self.cpu_bar.create_rectangle(0, 0, cpu_width, 15, fill=color, outline="")
+        
+        # Update Memory bar
+        self.mem_bar.delete("all")
+        bar_width = self.mem_bar.winfo_width()
+        if bar_width > 1:
+            mem_width = (mem_percent / 100) * bar_width
+            color = self._get_usage_color(mem_percent)
+            self.mem_bar.create_rectangle(0, 0, mem_width, 15, fill=color, outline="")
+    
+    def _get_usage_color(self, percent):
+        if percent < 50:
+            return "#27ae60"  # Green
+        elif percent < 80:
+            return "#f39c12"  # Orange
+        else:
+            return "#e74c3c"  # Red

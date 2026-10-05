@@ -5,7 +5,9 @@
  False,
  False,
  True,
- None,
+ ['/Users/andrew.brueggeman/Library/CloudStorage/OneDrive-Bayer/Working '
+  'folder/General Monsanto '
+  'Material/digital_workspace/todo-eisenhower-app/icon.icns'],
  None,
  False,
  False,
@@ -73,7 +75,7 @@
  [],
  False,
  False,
- 1786743298,
+ 1789146145,
  [('runw',
    '/opt/miniconda3/lib/python3.13/site-packages/PyInstaller/bootloader/Darwin-64bit/runw',
    'EXECUTABLE')],
