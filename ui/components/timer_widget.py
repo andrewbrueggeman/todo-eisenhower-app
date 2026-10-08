@@ -26,7 +26,10 @@ class TimerWidget:
 
     def _get_default_duration_value(self):
         settings = getattr(self.app.data_manager, "settings_data", {})
-        raw_value = settings.get("default_timer_duration", settings.get("timer_last_duration", "25"))
+        raw_value = settings.get(
+            "default_timer_duration",
+            settings.get("timer_last_duration", "25")
+        )
         raw_value = str(raw_value).strip()
 
         if raw_value in self.duration_options:
@@ -43,7 +46,12 @@ class TimerWidget:
         return int(value) * 60
 
     def setup_timer(self):
-        timer_container = tk.Frame(self.parent, bg="#f0f0f0", relief=tk.RAISED, bd=2)
+        timer_container = tk.Frame(
+            self.parent,
+            bg="#f0f0f0",
+            relief=tk.RAISED,
+            bd=2
+        )
         timer_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         self.timer_container = timer_container
 
@@ -112,10 +120,10 @@ class TimerWidget:
             text="▶ Start",
             command=self.start_timer,
             bg="#145a32",
-            fg="white",
+            fg="black",
             activebackground="#0e3d22",
-            activeforeground="white",
-            disabledforeground="#d0d0d0",
+            activeforeground="black",
+            disabledforeground="black",
             font=("Arial", 9, "bold"),
             padx=8,
             pady=4,
@@ -131,10 +139,10 @@ class TimerWidget:
             text="⏸ Pause",
             command=self.pause_timer,
             bg="#9c640c",
-            fg="white",
+            fg="black",
             activebackground="#7e5109",
-            activeforeground="white",
-            disabledforeground="#d0d0d0",
+            activeforeground="black",
+            disabledforeground="black",
             font=("Arial", 9, "bold"),
             padx=8,
             pady=4,
@@ -151,10 +159,10 @@ class TimerWidget:
             text="🔄 Restart",
             command=self.reset_timer,
             bg="#922b21",
-            fg="white",
+            fg="black",
             activebackground="#6e1f18",
-            activeforeground="white",
-            disabledforeground="#d0d0d0",
+            activeforeground="black",
+            disabledforeground="black",
             font=("Arial", 9, "bold"),
             padx=8,
             pady=4,
@@ -204,6 +212,7 @@ class TimerWidget:
     def pause_timer(self):
         if self.timer_running:
             self.timer_paused = not self.timer_paused
+
             if self.timer_paused:
                 self.pause_button.config(text="▶ Resume")
                 self.status_label.config(text="Paused", fg="#f39c12")
@@ -219,7 +228,9 @@ class TimerWidget:
         self._stop_flashing()
 
         selected_duration = self.duration_var.get()
-        self.duration_unit_label.config(text="sec" if selected_duration == "10s" else "min")
+        self.duration_unit_label.config(
+            text="sec" if selected_duration == "10s" else "min"
+        )
 
         self.time_left = self._duration_value_to_seconds(selected_duration)
         self.update_display()
@@ -237,40 +248,67 @@ class TimerWidget:
             self.status_label.config(text="Ready to start", fg="#7f8c8d")
 
     def change_duration(self, value):
-        self.duration_unit_label.config(text="sec" if value == "10s" else "min")
+        self.duration_unit_label.config(
+            text="sec" if value == "10s" else "min"
+        )
 
         if not self.timer_running and not self.flashing:
             self.time_left = self._duration_value_to_seconds(value)
+
             if value == "10s":
-                self.status_label.config(text="Duration set to 10 seconds", fg="#3498db")
+                self.status_label.config(
+                    text="Duration set to 10 seconds",
+                    fg="#3498db"
+                )
             else:
-                self.status_label.config(text=f"Duration set to {value} minutes", fg="#3498db")
+                self.status_label.config(
+                    text=f"Duration set to {value} minutes",
+                    fg="#3498db"
+                )
+
             self.update_display()
 
     def apply_default_duration_from_settings(self):
         if not self.timer_running and not self.flashing:
             default_duration = self._get_default_duration_value()
             self.duration_var.set(default_duration)
-            self.duration_unit_label.config(text="sec" if default_duration == "10s" else "min")
+            self.duration_unit_label.config(
+                text="sec" if default_duration == "10s" else "min"
+            )
             self.time_left = self._duration_value_to_seconds(default_duration)
             self.update_display()
-            self.status_label.config(text="Default timer updated", fg="#3498db")
+            self.status_label.config(
+                text="Default timer updated",
+                fg="#3498db"
+            )
 
     def _run_timer(self, run_id):
-        while self.timer_running and run_id == self.timer_run_id and self.time_left > 0:
+        while (
+            self.timer_running
+            and run_id == self.timer_run_id
+            and self.time_left > 0
+        ):
             if not self.timer_paused:
                 self.time_left -= 1
                 self.app.root.after(0, self.update_display)
+
             time.sleep(1)
 
-        if self.timer_running and run_id == self.timer_run_id and self.time_left <= 0:
+        if (
+            self.timer_running
+            and run_id == self.timer_run_id
+            and self.time_left <= 0
+        ):
             self.app.root.after(0, self._timer_finished)
 
     def _timer_finished(self):
         self.timer_running = False
         self.start_button.config(state=tk.DISABLED)
         self.pause_button.config(state=tk.DISABLED, text="⏸ Pause")
-        self.status_label.config(text="Time's up! Press Restart to begin again.", fg="#e74c3c")
+        self.status_label.config(
+            text="Time's up! Press Restart to begin again.",
+            fg="#e74c3c"
+        )
 
         self.flashing = True
         self.flash_on = False
@@ -306,14 +344,17 @@ class TimerWidget:
             self.app.root.config(bg=self.original_bg or "#f0f0f0")
         except Exception:
             pass
+
         try:
             self.app.main_frame.config(bg="#f0f0f0")
         except Exception:
             pass
+
         try:
             self.timer_container.config(bg="#f0f0f0")
         except Exception:
             pass
+
         try:
             self.time_display.config(fg="#2c3e50", bg="#f0f0f0")
             self.status_label.config(bg="#f0f0f0", fg="#7f8c8d")
