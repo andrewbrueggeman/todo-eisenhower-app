@@ -9,6 +9,7 @@ class MatrixWidget:
     NORMAL_BORDER_COLOR = "#cccccc"
     NORMAL_INCOMPLETE_BG = "#f8f9fa"
     NORMAL_COMPLETED_BG = "#e8f5e9"
+    DRAG_HIGHLIGHT_COLOR = "#fff3cd"
 
     DEFAULT_QUADRANT_NAMES = {
         "quadrant_1": "Critical Actions",
@@ -32,6 +33,9 @@ class MatrixWidget:
         self.main_scroll_canvas = None
         self.scroll_canvases = set()
         self.selected_task = None
+
+        self.drag_state = None
+        self.drag_placeholder = None
 
         self.setup_matrix()
 
@@ -78,6 +82,8 @@ class MatrixWidget:
         self.main_scroll_canvas = None
         self.scroll_canvases = set()
         self.selected_task = None
+        self.drag_state = None
+        self.drag_placeholder = None
 
         title_label = tk.Label(
             self.parent,
@@ -582,6 +588,255 @@ class MatrixWidget:
         self._restore_task_visual(self.selected_task)
         self.selected_task = None
 
+    def _clear_drag_placeholder(self):
+        if self.drag_placeholder is not None:
+            try:
+                if self.drag_placeholder.winfo_exists():
+                    self.drag_placeholder.destroy()
+            except Exception:
+                pass
+
+        self.drag_placeholder = None
+
+    def _get_drag_destination_position(self, drag_state, y_root):
+        combined_quad_id = drag_state["combined_quad_id"]
+        task_widgets = self.task_widgets.get(
+            combined_quad_id,
+            []
+        )
+
+        for index, task_widget in enumerate(task_widgets):
+            task_frame = task_widget["frame"]
+
+            try:
+                frame_top = task_frame.winfo_rooty()
+                frame_height = task_frame.winfo_height()
+            except Exception:
+                continue
+
+            midpoint = frame_top + (frame_height // 2)
+
+            if y_root < midpoint:
+                return index
+
+        return len(task_widgets)
+
+    def _show_drag_placeholder(self, drag_state, destination_position):
+        self._clear_drag_placeholder()
+
+        combined_quad_id = drag_state["combined_quad_id"]
+        task_widgets = self.task_widgets.get(
+            combined_quad_id,
+            []
+        )
+        parent = drag_state["parent"]
+
+        placeholder = tk.Frame(
+            parent,
+            bg=self.SELECTED_BORDER_COLOR,
+            height=4
+        )
+        placeholder.pack_propagate(False)
+
+        if destination_position < len(task_widgets):
+            target_frame = task_widgets[
+                destination_position
+            ]["frame"]
+
+            placeholder.pack(
+                fill=tk.X,
+                padx=3,
+                pady=1,
+                before=target_frame
+            )
+        else:
+            placeholder.pack(
+                fill=tk.X,
+                padx=3,
+                pady=1
+            )
+
+        self.drag_placeholder = placeholder
+
+    def _restore_dragged_task_background(self, drag_state):
+        try:
+            normal_bg = self._normal_task_bg(
+                drag_state["date"],
+                drag_state["quadrant"],
+                drag_state["task_index"]
+            )
+
+            self._set_task_visual_bg(
+                drag_state["container"],
+                normal_bg,
+                border_color=self.NORMAL_BORDER_COLOR,
+                border_width=1
+            )
+        except Exception:
+            pass
+
+    def _on_task_press(
+        self,
+        event,
+        target_date,
+        quadrant,
+        task_index,
+        text_container,
+        task_frame,
+        parent
+    ):
+        combined_quad_id = (
+            f"{target_date.isoformat()}|{quadrant}"
+        )
+
+        self.drag_state = {
+            "date": target_date,
+            "quadrant": quadrant,
+            "task_index": task_index,
+            "container": text_container,
+            "task_frame": task_frame,
+            "parent": parent,
+            "combined_quad_id": combined_quad_id,
+            "start_x_root": event.x_root,
+            "start_y_root": event.y_root,
+            "dragging": False,
+            "destination_position": task_index
+        }
+
+        try:
+            event.widget.grab_set()
+        except Exception:
+            pass
+
+        return "break"
+
+    def _on_task_drag(self, event):
+        if not self.drag_state:
+            return "break"
+
+        drag_state = self.drag_state
+
+        x_change = abs(
+            event.x_root - drag_state["start_x_root"]
+        )
+        y_change = abs(
+            event.y_root - drag_state["start_y_root"]
+        )
+
+        # A small movement remains a normal task click.
+        if not drag_state["dragging"] and max(
+            x_change,
+            y_change
+        ) < 5:
+            return "break"
+
+        if not drag_state["dragging"]:
+            drag_state["dragging"] = True
+            self._clear_selection()
+
+            self._set_task_visual_bg(
+                drag_state["container"],
+                self.DRAG_HIGHLIGHT_COLOR,
+                border_color=self.SELECTED_BORDER_COLOR,
+                border_width=2
+            )
+
+        destination_position = self._get_drag_destination_position(
+            drag_state,
+            event.y_root
+        )
+
+        if destination_position != drag_state[
+            "destination_position"
+        ]:
+            drag_state["destination_position"] = (
+                destination_position
+            )
+            self._show_drag_placeholder(
+                drag_state,
+                destination_position
+            )
+
+        return "break"
+
+    def _move_task_by_drag_position(self, drag_state):
+        task_index = drag_state["task_index"]
+        destination_position = drag_state["destination_position"]
+
+        # Drop immediately before or after the same task:
+        # no change in task order.
+        if destination_position in (
+            task_index,
+            task_index + 1
+        ):
+            return False
+
+        moved = False
+
+        # Dropping above the source task.
+        if destination_position < task_index:
+            steps = task_index - destination_position
+
+            for _ in range(steps):
+                moved = self.app.data_manager.move_task_within_quadrant(
+                    drag_state["date"],
+                    drag_state["quadrant"],
+                    task_index,
+                    "up"
+                )
+
+                if not moved:
+                    break
+
+                task_index -= 1
+
+        # Dropping below the source task.
+        else:
+            steps = destination_position - task_index - 1
+
+            for _ in range(steps):
+                moved = self.app.data_manager.move_task_within_quadrant(
+                    drag_state["date"],
+                    drag_state["quadrant"],
+                    task_index,
+                    "down"
+                )
+
+                if not moved:
+                    break
+
+                task_index += 1
+
+        return moved
+
+    def _on_task_release(self, event):
+        if not self.drag_state:
+            return "break"
+
+        drag_state = self.drag_state
+        self.drag_state = None
+
+        try:
+            event.widget.grab_release()
+        except Exception:
+            pass
+
+        self._clear_drag_placeholder()
+        self._restore_dragged_task_background(drag_state)
+
+        if not drag_state["dragging"]:
+            return self._select_task(
+                drag_state["date"],
+                drag_state["quadrant"],
+                drag_state["task_index"],
+                drag_state["container"]
+            )
+
+        if self._move_task_by_drag_position(drag_state):
+            self.load_tasks()
+
+        return "break"
+
     def create_task_widget(
         self,
         parent,
@@ -650,21 +905,44 @@ class MatrixWidget:
 
         task_label.bind(
             "<Button-1>",
-            lambda e: self._select_task(
+            lambda e: self._on_task_press(
+                e,
                 target_date,
                 quadrant,
                 task_index,
-                text_container
+                text_container,
+                task_frame,
+                parent
+            )
+        )
+        task_label.bind(
+            "<B1-Motion>",
+            self._on_task_drag
+        )
+        task_label.bind(
+            "<ButtonRelease-1>",
+            self._on_task_release
+        )
+
+        text_container.bind(
+            "<Button-1>",
+            lambda e: self._on_task_press(
+                e,
+                target_date,
+                quadrant,
+                task_index,
+                text_container,
+                task_frame,
+                parent
             )
         )
         text_container.bind(
-            "<Button-1>",
-            lambda e: self._select_task(
-                target_date,
-                quadrant,
-                task_index,
-                text_container
-            )
+            "<B1-Motion>",
+            self._on_task_drag
+        )
+        text_container.bind(
+            "<ButtonRelease-1>",
+            self._on_task_release
         )
 
         task_label.bind(
@@ -746,12 +1024,23 @@ class MatrixWidget:
 
             note_icon.bind(
                 "<Button-1>",
-                lambda e: self._select_task(
+                lambda e: self._on_task_press(
+                    e,
                     target_date,
                     quadrant,
                     task_index,
-                    text_container
+                    text_container,
+                    task_frame,
+                    parent
                 )
+            )
+            note_icon.bind(
+                "<B1-Motion>",
+                self._on_task_drag
+            )
+            note_icon.bind(
+                "<ButtonRelease-1>",
+                self._on_task_release
             )
             note_icon.bind(
                 "<Button-2>",
@@ -1300,6 +1589,8 @@ class MatrixWidget:
 
     def load_tasks(self):
         self.selected_task = None
+        self.drag_state = None
+        self._clear_drag_placeholder()
 
         for combined_quad_id in self.quadrant_frames:
             for widget in self.quadrant_frames[

@@ -670,6 +670,62 @@ class DataManager:
             print(f"❌ Error deleting task: {e}")
             return False
 
+    def move_task_to_position(
+        self,
+        target_date,
+        quadrant: str,
+        task_index: int,
+        destination_position: int
+    ) -> bool:
+        """
+        Move one task to an insertion position within its current quadrant.
+
+        destination_position is based on the task list before the source task
+        is removed. For example:
+            0 = before the first task
+            len(tasks) = after the last task
+        """
+        try:
+            date_str = self._date_to_key(target_date)
+
+            if date_str not in self.tasks_data:
+                return False
+
+            if quadrant not in self.tasks_data[date_str]:
+                return False
+
+            tasks = self.tasks_data[date_str][quadrant]
+
+            if not (0 <= task_index < len(tasks)):
+                return False
+
+            if not (0 <= destination_position <= len(tasks)):
+                return False
+
+            # Dropping immediately before or immediately after the same task
+            # leaves the list unchanged.
+            if destination_position in (
+                task_index,
+                task_index + 1
+            ):
+                return False
+
+            task = tasks.pop(task_index)
+
+            # Once the source task is removed, all positions after it shift
+            # upward by one.
+            if destination_position > task_index:
+                destination_position -= 1
+
+            tasks.insert(destination_position, task)
+
+            return self.save_tasks()
+
+        except Exception as e:
+            print(f"❌ Error moving task to a position: {e}")
+            return False
+
+    
     def move_task_within_quadrant(
         self,
         target_date,

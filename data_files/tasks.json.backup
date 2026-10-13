@@ -394,6 +394,15 @@
         "completed": false,
         "migrated_from": "2026-08-27",
         "migrated_on": "2026-09-01"
+      },
+      {
+        "text": "oldtask",
+        "notes": "",
+        "date": "2026-09-01",
+        "quadrant": "quadrant_1",
+        "completed": false,
+        "migrated_from": "2026-08-31",
+        "migrated_on": "2026-09-01"
       }
     ],
     "quadrant_2": [],
@@ -401,11 +410,24 @@
     "quadrant_4": []
   },
   "2026-08-31": {
+    "quadrant_1": [],
+    "quadrant_2": [],
+    "quadrant_3": [],
+    "quadrant_4": []
+  },
+  "2026-10-13": {
     "quadrant_1": [
       {
-        "text": "oldtask",
+        "text": "test2",
         "notes": "",
-        "date": "2026-08-31",
+        "date": "2026-10-13",
+        "quadrant": "quadrant_1",
+        "completed": false
+      },
+      {
+        "text": "test1",
+        "notes": "",
+        "date": "2026-10-13",
         "quadrant": "quadrant_1",
         "completed": false
       }
