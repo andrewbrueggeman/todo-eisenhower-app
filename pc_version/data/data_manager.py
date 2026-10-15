@@ -46,29 +46,44 @@ class DataManager:
 
     def _get_data_directory(self):
         """
-        Packaged app:
-            store data in a sibling folder NEXT TO the .app bundle
+        Packaged macOS app:
+            Store data in a sibling folder next to the .app bundle.
 
-        Example:
-            dist/
-                Eisenhower Matrix.app
-                EisenhowerMatrixData/
+        Packaged Windows app:
+            Store data in a subfolder alongside the .exe file.
 
         Source run:
-            use project_root/data_files
+            Use project_root/data_files.
         """
         if getattr(sys, "frozen", False):
-            executable_dir = os.path.dirname(os.path.abspath(sys.executable))
-            app_contents_dir = os.path.dirname(executable_dir)
-            app_bundle_dir = os.path.dirname(app_contents_dir)
-            app_parent_dir = os.path.dirname(app_bundle_dir)
+            if sys.platform == "darwin":
+                executable_dir = os.path.dirname(
+                    os.path.abspath(sys.executable)
+                )
+                app_contents_dir = os.path.dirname(executable_dir)
+                app_bundle_dir = os.path.dirname(app_contents_dir)
+                app_parent_dir = os.path.dirname(app_bundle_dir)
 
-            return os.path.join(app_parent_dir, "EisenhowerMatrixData")
+                return os.path.join(
+                    app_parent_dir,
+                    "EisenhowerMatrixData"
+                )
+
+            executable_dir = os.path.dirname(
+                os.path.abspath(sys.executable)
+            )
+
+            return os.path.join(
+                executable_dir,
+                "EisenhowerMatrixData"
+            )
 
         project_root = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..")
         )
+
         return os.path.join(project_root, "data_files")
+
 
     def _setup_data_directory(self):
         try:

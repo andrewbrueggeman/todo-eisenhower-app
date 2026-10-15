@@ -1,0 +1,20 @@
+{
+  "default_timer_duration": "30",
+  "timer_last_duration": "30",
+  "auto_restart_timer": true,
+  "outlook_sync_enabled": false,
+  "auto_migrate_tasks": true,
+  "matrix_view_mode": "1_day",
+  "layout": {
+    "show_timer": true,
+    "show_notes": true,
+    "show_monitor": true,
+    "matrix_position": "top",
+    "notes_position": "middle",
+    "bottom_position": "bottom"
+  },
+  "outlook_last_sync": null,
+  "timer_sound_enabled": true,
+  "add_task_button_bg": "#333333",
+  "add_task_button_fg": "#ffffff"
+}
