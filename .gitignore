@@ -2,3 +2,16 @@
 .Rhistory
 .RData
 .Ruserdata
+# -------------------------------------------------
+# PyInstaller: temporary build and distribution output
+# -------------------------------------------------
+build/
+dist/
+dist_pc/
+*.spec.bak
+
+# Packaged application files / release archives
+*.zip
+*.pkg
+*.dmg
+*.app/

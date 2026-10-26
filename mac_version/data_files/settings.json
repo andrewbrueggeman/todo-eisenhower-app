@@ -5,6 +5,12 @@
   "outlook_sync_enabled": false,
   "auto_migrate_tasks": true,
   "matrix_view_mode": "1_day",
+  "quadrant_names": {
+    "quadrant_1": "Critical Actions",
+    "quadrant_2": "Strategic Work",
+    "quadrant_3": "Routine Tasks",
+    "quadrant_4": "Backlog/Opportunities"
+  },
   "layout": {
     "show_timer": true,
     "show_notes": true,
@@ -16,5 +22,6 @@
   "outlook_last_sync": null,
   "timer_sound_enabled": true,
   "add_task_button_bg": "#333333",
-  "add_task_button_fg": "#ffffff"
+  "add_task_button_fg": "#ffffff",
+  "task_font_size": 16
 }

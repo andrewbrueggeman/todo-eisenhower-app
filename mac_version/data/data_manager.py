@@ -871,3 +871,20 @@ class DataManager:
                 shutil.copy2(filepath, f"{filepath}.backup")
             except Exception:
                 pass
+    def _setup_data_directory(self):
+        """Create the data directory and confirm that it is writable."""
+        try:
+            os.makedirs(self.data_dir, exist_ok=True)
+
+            test_file = os.path.join(self.data_dir, ".test_write")
+            with open(test_file, "w", encoding="utf-8") as file:
+                file.write("test")
+
+            os.remove(test_file)
+
+        except Exception as error:
+            print(
+                f"ERROR: Cannot write to data directory "
+                f"'{self.data_dir}': {error}"
+            )
+            raise

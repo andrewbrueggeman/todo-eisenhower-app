@@ -866,14 +866,23 @@ class MatrixWidget:
 
         is_completed = task_data.get("completed", False)
 
+        task_font_size = self.app.data_manager.settings_data.get(
+            "task_font_size",
+            10
+        )
+        try:
+            task_font_size = int(task_font_size)
+        except (TypeError, ValueError):
+            task_font_size = 10
+
         if is_completed:
             text_bg = self.NORMAL_COMPLETED_BG
             text_fg = "#7f8c8d"
-            font_style = ("Arial", 10, "overstrike")
+            font_style = ("Arial", task_font_size, "overstrike")
         else:
             text_bg = self.NORMAL_INCOMPLETE_BG
             text_fg = "#2c3e50"
-            font_style = ("Arial", 10)
+            font_style = ("Arial", task_font_size)
 
         text_container = tk.Frame(
             task_frame,
