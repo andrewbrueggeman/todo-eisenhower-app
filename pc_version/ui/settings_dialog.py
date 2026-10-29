@@ -390,6 +390,44 @@ class SettingsDialog:
     def setup_appearance_tab(self, parent):
         settings = self.app.data_manager.settings_data
 
+        task_font_frame = tk.LabelFrame(
+            parent,
+            text="Task Text Size",
+            font=("Arial", 12, "bold"),
+            padx=10,
+            pady=10
+        )
+        task_font_frame.pack(fill=tk.X, pady=(0, 20))
+
+        tk.Label(
+            task_font_frame,
+            text="Matrix task font size:",
+            font=("Arial", 11)
+        ).pack(side=tk.LEFT)
+
+        current_size = settings.get("task_font_size", 10)
+        try:
+            current_size = int(current_size)
+        except (TypeError, ValueError):
+            current_size = 10
+
+        self.task_font_size_var = tk.StringVar(value=str(current_size))
+        ttk.Combobox(
+            task_font_frame,
+            textvariable=self.task_font_size_var,
+            values=["8", "9", "10", "11", "12", "13", "14", "16"],
+            state="readonly",
+            width=5,
+            font=("Arial", 10)
+        ).pack(side=tk.LEFT, padx=(10, 8))
+
+        tk.Label(
+            task_font_frame,
+            text="Changes apply when settings are saved.",
+            font=("Arial", 10, "italic"),
+            fg="#555555"
+        ).pack(side=tk.LEFT)
+
         button_frame = tk.LabelFrame(
             parent,
             text="Add Task Button Colors",
@@ -793,6 +831,11 @@ class SettingsDialog:
 
         selected_default_duration = self.default_duration_var.get()
 
+        try:
+            task_font_size = int(self.task_font_size_var.get())
+        except (TypeError, ValueError):
+            task_font_size = 10
+
         self.result = {
             "layout": {
                 "show_timer": self.show_timer_var.get(),
@@ -807,6 +850,7 @@ class SettingsDialog:
             "default_timer_duration": selected_default_duration,
             "timer_last_duration": selected_default_duration,
             "auto_restart_timer": self.auto_restart_var.get(),
+            "task_font_size": task_font_size,
             "add_task_button_bg": self.button_bg_color,
             "add_task_button_fg": self.button_fg_color
         }
@@ -823,7 +867,7 @@ class SettingsDialog:
         messagebox.showinfo(
             "Settings Saved",
             "Settings saved successfully!\n\n"
-            "Quadrant names, timer default, matrix view, and button colors "
+            "Quadrant names, task text size, timer default, matrix view, and button colors "
             "have been updated.\n"
             "Layout position changes will take effect after restarting "
             "the application."
