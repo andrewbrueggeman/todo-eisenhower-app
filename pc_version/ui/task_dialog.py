@@ -198,6 +198,19 @@ class CalendarWidget:
 
 
 class TaskDialog:
+    # Each option is (display name, stored color). An empty value means the
+    # task keeps the normal Matrix appearance.
+    TASK_COLOR_OPTIONS = (
+        ("No color", ""),
+        ("Red", "#f8d7da"),
+        ("Orange", "#fde2c5"),
+        ("Yellow", "#fff3cd"),
+        ("Green", "#d1e7dd"),
+        ("Blue", "#dbeafe"),
+        ("Purple", "#e9d8fd"),
+        ("Gray", "#e5e7eb")
+    )
+
     DEFAULT_QUADRANT_NAMES = {
         "quadrant_1": "Critical Actions",
         "quadrant_2": "Strategic Work",
@@ -608,6 +621,38 @@ class TaskDialog:
             value=self.task_data.get("quadrant", "quadrant_1")
         )
 
+        tk.Label(
+            parent,
+            text="Task Color (optional)",
+            font=("Arial", 11, "bold"),
+            bg="#f0f0f0",
+            fg="black"
+        ).pack(anchor=tk.W, pady=(0, 2))
+
+        selected_color = self._normalized_task_color(
+            self.task_data.get("color", "")
+        )
+        self.task_color_var = tk.StringVar(value=selected_color)
+
+        color_frame = tk.Frame(parent, bg="#f0f0f0")
+        color_frame.pack(fill=tk.X, pady=(0, 10))
+
+        for color_name, color_value in self.TASK_COLOR_OPTIONS:
+            color_button = tk.Radiobutton(
+                color_frame,
+                text=color_name,
+                value=color_value,
+                variable=self.task_color_var,
+                bg="#f0f0f0",
+                fg="black",
+                activebackground="#f0f0f0",
+                activeforeground="black",
+                selectcolor=(color_value or "white"),
+                anchor="w",
+                font=("Arial", 10)
+            )
+            color_button.pack(side=tk.LEFT, padx=(0, 8))
+
         quadrant_frame = tk.Frame(parent, bg="#f0f0f0")
         quadrant_frame.pack(fill=tk.X, pady=(5, 10))
 
@@ -788,6 +833,10 @@ class TaskDialog:
                     bd=1
                 )
 
+    def _normalized_task_color(self, value):
+        valid_colors = {color for _name, color in self.TASK_COLOR_OPTIONS}
+        return value if value in valid_colors else ""
+
     def save(self):
         text = self.text_entry.get("1.0", tk.END).strip()
 
@@ -804,7 +853,10 @@ class TaskDialog:
             "notes": self.notes_entry.get("1.0", tk.END).strip(),
             "date": selected_date.isoformat(),
             "quadrant": self.quadrant_var.get(),
-            "completed": self.task_data.get("completed", False)
+            "completed": self.task_data.get("completed", False),
+            "color": self._normalized_task_color(
+                self.task_color_var.get()
+            )
         }
 
         try:

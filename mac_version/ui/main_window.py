@@ -202,6 +202,11 @@ class EisenhowerMatrixApp:
             self.data_manager = DataManager()
 
         self.current_date = datetime.now().date()
+        # Tracks the actual calendar day independently of the date selected
+        # in the Matrix. This lets sleep/wake catch-up work correctly even
+        # when the user was viewing a historical date.
+        self.last_seen_system_date = self.current_date
+        self.rollover_check_job = None
         self.monitoring = True
         self.timer_running = False
         self.outlook_sync = None
@@ -213,6 +218,11 @@ class EisenhowerMatrixApp:
         self.setup_ui()
         self.load_data()
         self.bind_keys()
+
+        # Tkinter callbacks pause while macOS sleeps. Check periodically and
+        # also immediately when the app regains focus after wake/re-activation.
+        self.root.bind("<FocusIn>", self.on_app_focus_in, add="+")
+        self.schedule_daily_rollover_check()
 
         settings = self.data_manager.settings_data.get("layout", {})
 
@@ -557,6 +567,57 @@ class EisenhowerMatrixApp:
         if hasattr(self, "notes_widget"):
             self.notes_widget.load_notes()
 
+    def schedule_daily_rollover_check(self):
+        """Check once a minute in case the computer slept across midnight."""
+        self.rollover_check_job = self.root.after(
+            60_000,
+            self._scheduled_daily_rollover_check
+        )
+
+    def _scheduled_daily_rollover_check(self):
+        try:
+            self.check_for_day_rollover()
+        finally:
+            # Re-register even if a transient UI or disk error occurs.
+            if self.monitoring:
+                self.schedule_daily_rollover_check()
+
+    def on_app_focus_in(self, event=None):
+        """Catch up immediately after macOS wake or app re-activation."""
+        self.check_for_day_rollover()
+
+    def check_for_day_rollover(self):
+        """Migrate unfinished prior-day tasks when the calendar date changes."""
+        today = datetime.now().date()
+
+        if today == self.last_seen_system_date:
+            return
+
+        previous_system_date = self.last_seen_system_date
+        self.last_seen_system_date = today
+
+        try:
+            # Refreshing the Matrix reloads notes, so preserve any edits first.
+            if (
+                hasattr(self, "notes_widget")
+                and self.notes_widget.unsaved_changes
+            ):
+                self.notes_widget.save_notes(silent=True)
+
+            self.data_manager.run_startup_migration_for_today(today)
+
+            # A real system day change returns the Matrix to the current day.
+            self.current_date = today
+            self.refresh_data()
+
+            print(
+                "✓ Detected calendar-day rollover: "
+                f"{previous_system_date.isoformat()} -> {today.isoformat()}"
+            )
+
+        except Exception as error:
+            print(f"❌ Error handling daily rollover: {error}")
+
     def load_data(self):
         if hasattr(self, "matrix_widget"):
             self.matrix_widget.load_tasks()
@@ -628,6 +689,13 @@ class EisenhowerMatrixApp:
 
         self.monitoring = False
         self.timer_running = False
+
+        if self.rollover_check_job is not None:
+            try:
+                self.root.after_cancel(self.rollover_check_job)
+            except tk.TclError:
+                pass
+            self.rollover_check_job = None
 
         time.sleep(0.1)
 

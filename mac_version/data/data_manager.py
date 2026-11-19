@@ -46,38 +46,6 @@ class DataManager:
 
     def _get_data_directory(self):
         """
-        Packaged app:
-            store data in a sibling folder NEXT TO the .app bundle
-
-        Example:
-            dist/
-                Eisenhower Matrix.app
-                EisenhowerMatrixData/
-
-        Source run:
-            use project_root/data_files
-        """
-        if getattr(sys, "frozen", False):
-            executable_dir = os.path.dirname(
-                os.path.abspath(sys.executable)
-            )
-            app_contents_dir = os.path.dirname(executable_dir)
-            app_bundle_dir = os.path.dirname(app_contents_dir)
-            app_parent_dir = os.path.dirname(app_bundle_dir)
-
-            return os.path.join(
-                app_parent_dir,
-                "EisenhowerMatrixData"
-            )
-
-        project_root = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..")
-        )
-
-        return os.path.join(project_root, "data_files")
-
-    def _get_data_directory(self):
-        """
         Packaged macOS app:
             Store data in a sibling folder next to the .app bundle.
 
@@ -481,7 +449,8 @@ class DataManager:
             - If the same task already exists on the target date, the prior-day
               copy is still removed to prevent duplicate lingering tasks.
             - Completed prior-day tasks are left untouched.
-            - Migration scans the previous 7 days.
+            - Migration scans every saved date before the target date, so an
+              app closed or asleep for more than a week still catches up.
         """
         try:
             target_date_obj = self._normalize_date(target_date)
@@ -500,12 +469,21 @@ class DataManager:
             removed_duplicate_count = 0
             changed = False
 
-            for days_back in range(1, 8):
-                previous_date = target_date_obj - timedelta(days=days_back)
-                previous_date_str = previous_date.isoformat()
+            previous_dates = []
 
-                if previous_date_str not in self.tasks_data:
-                    continue
+            for date_key in self.tasks_data:
+                parsed_date = self._normalize_date(date_key)
+
+                if (
+                    parsed_date is not None
+                    and parsed_date < target_date_obj
+                ):
+                    previous_dates.append(parsed_date)
+
+            # Process newest days first. This preserves the previous behavior
+            # while allowing recovery after gaps longer than seven days.
+            for previous_date in sorted(previous_dates, reverse=True):
+                previous_date_str = previous_date.isoformat()
 
                 for quadrant in self.QUADRANTS:
                     original_tasks = self.tasks_data[

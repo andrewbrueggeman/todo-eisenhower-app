@@ -475,20 +475,31 @@ class MatrixWidget:
         self.quadrant_frames[combined_quad_id] = scrollable_frame
         self.task_widgets[combined_quad_id] = []
 
+    def _task_color(self, task_data):
+        color = task_data.get("color", "")
+
+        if (
+            isinstance(color, str)
+            and len(color) == 7
+            and color.startswith("#")
+        ):
+            return color
+
+        return ""
+
     def _normal_task_bg(self, target_date, quadrant, task_index):
         try:
             tasks = self.app.data_manager.get_tasks_for_date(target_date)
 
             if quadrant in tasks and 0 <= task_index < len(tasks[quadrant]):
-                is_completed = tasks[quadrant][task_index].get(
-                    "completed",
-                    False
-                )
+                task_data = tasks[quadrant][task_index]
+                is_completed = task_data.get("completed", False)
 
+                # Completed tasks retain their standard completion styling.
                 if is_completed:
                     return self.NORMAL_COMPLETED_BG
 
-                return self.NORMAL_INCOMPLETE_BG
+                return self._task_color(task_data) or self.NORMAL_INCOMPLETE_BG
 
         except Exception:
             pass
@@ -876,11 +887,12 @@ class MatrixWidget:
             task_font_size = 10
 
         if is_completed:
+            # Completed tasks remain visually distinct regardless of color.
             text_bg = self.NORMAL_COMPLETED_BG
             text_fg = "#7f8c8d"
             font_style = ("Arial", task_font_size, "overstrike")
         else:
-            text_bg = self.NORMAL_INCOMPLETE_BG
+            text_bg = self._task_color(task_data) or self.NORMAL_INCOMPLETE_BG
             text_fg = "#2c3e50"
             font_style = ("Arial", task_font_size)
 

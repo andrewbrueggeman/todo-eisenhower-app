@@ -1,6 +1,7 @@
 import tkinter as tk
 from tkinter import messagebox
 from datetime import datetime
+import sys
 
 
 class MatrixWidget:
@@ -33,6 +34,9 @@ class MatrixWidget:
         self.main_scroll_canvas = None
         self.scroll_canvases = set()
         self.selected_task = None
+        self.mousewheel_binding_tag = (
+            f"EisenhowerMatrixWheel_{id(self)}"
+        )
 
         self.drag_state = None
         self.drag_placeholder = None
@@ -197,27 +201,71 @@ class MatrixWidget:
         return self.main_scroll_canvas
 
     def _bind_mousewheel(self):
+        """Install one additive application-wide wheel handler for the Matrix."""
         try:
+            # Remove the custom bindtags installed by the previous trackpad
+            # update scripts. Their handlers run before the normal "all" tag
+            # and can prevent the reliable global handler below from running.
+            self._remove_legacy_mousewheel_bindtags()
+
+            if getattr(self, "_global_mousewheel_binding_installed", False):
+                return
+
+            # bind_all(..., add="+") adds this handler without deleting Tk's
+            # other bindings. Unlike widget-only bindings, the "all" bindtag
+            # receives gestures when the pointer is over Labels, Checkbuttons,
+            # Frames, and the embedded Frame inside each Canvas.
             self.app.root.bind_all(
                 "<MouseWheel>",
-                self._on_mousewheel
+                self._on_mousewheel,
+                add="+"
+            )
+            self.app.root.bind_all(
+                "<TouchpadScroll>",
+                self._on_touchpad_scroll,
+                add="+"
             )
             self.app.root.bind_all(
                 "<Button-4>",
-                self._on_mousewheel_linux_up
+                self._on_mousewheel_linux_up,
+                add="+"
             )
             self.app.root.bind_all(
                 "<Button-5>",
-                self._on_mousewheel_linux_down
+                self._on_mousewheel_linux_down,
+                add="+"
             )
-        except Exception:
-            pass
+            self._global_mousewheel_binding_installed = True
+
+        except Exception as error:
+            print(f"Could not install Matrix wheel scrolling: {error}")
 
     def _unbind_mousewheel(self):
+        """Remove obsolete custom bindtags; leave the additive global handler."""
+        self._remove_legacy_mousewheel_bindtags()
+
+    def _remove_legacy_mousewheel_bindtags(self):
+        """Remove only the custom bindtag added by the earlier updater scripts."""
+        legacy_tag = getattr(self, "mousewheel_binding_tag", None)
+
+        if not legacy_tag:
+            return
+
+        def strip_tag(widget):
+            try:
+                tags = [tag for tag in widget.bindtags() if tag != legacy_tag]
+                widget.bindtags(tuple(tags))
+
+                for child in widget.winfo_children():
+                    strip_tag(child)
+            except Exception:
+                pass
+
         try:
-            self.app.root.unbind_all("<MouseWheel>")
-            self.app.root.unbind_all("<Button-4>")
-            self.app.root.unbind_all("<Button-5>")
+            strip_tag(self.parent)
+            self.app.root.unbind_class(legacy_tag, "<MouseWheel>")
+            self.app.root.unbind_class(legacy_tag, "<Button-4>")
+            self.app.root.unbind_class(legacy_tag, "<Button-5>")
         except Exception:
             pass
 
@@ -225,15 +273,12 @@ class MatrixWidget:
         if delta == 0:
             return 0
 
-        if abs(delta) < 120:
-            step = -1 if delta > 0 else 1
-        else:
-            step = int(-1 * (delta / 120))
+        # macOS Tk reports small, high-resolution values for a two-finger
+        # trackpad gesture. Windows conventionally reports multiples of 120.
+        if sys.platform == "darwin":
+            return -int(delta)
 
-        if step == 0:
-            step = -1 if delta > 0 else 1
-
-        return step
+        return int(-delta / 120) or (-1 if delta > 0 else 1)
 
     def _on_mousewheel(self, event):
         canvas = self._find_scroll_canvas(event.widget)
@@ -245,6 +290,30 @@ class MatrixWidget:
 
         if step != 0:
             canvas.yview_scroll(step, "units")
+
+        return "break"
+
+    def _touchpad_vertical_delta(self, event):
+        """Decode Tk 9's packed signed 16-bit deltaY from TouchpadScroll."""
+        packed_delta = int(getattr(event, "delta", 0))
+        delta_y = packed_delta & 0xFFFF
+
+        if delta_y >= 0x8000:
+            delta_y -= 0x10000
+
+        return delta_y
+
+    def _on_touchpad_scroll(self, event):
+        canvas = self._find_scroll_canvas(event.widget)
+
+        if canvas is None:
+            return None
+
+        delta_y = self._touchpad_vertical_delta(event)
+
+        if delta_y:
+            # Tk 9/Aqua provides a signed high-resolution vertical delta.
+            canvas.yview_scroll(-delta_y, "units")
 
         return "break"
 
@@ -475,20 +544,31 @@ class MatrixWidget:
         self.quadrant_frames[combined_quad_id] = scrollable_frame
         self.task_widgets[combined_quad_id] = []
 
+    def _task_color(self, task_data):
+        color = task_data.get("color", "")
+
+        if (
+            isinstance(color, str)
+            and len(color) == 7
+            and color.startswith("#")
+        ):
+            return color
+
+        return ""
+
     def _normal_task_bg(self, target_date, quadrant, task_index):
         try:
             tasks = self.app.data_manager.get_tasks_for_date(target_date)
 
             if quadrant in tasks and 0 <= task_index < len(tasks[quadrant]):
-                is_completed = tasks[quadrant][task_index].get(
-                    "completed",
-                    False
-                )
+                task_data = tasks[quadrant][task_index]
+                is_completed = task_data.get("completed", False)
 
+                # Completed tasks retain their standard completion styling.
                 if is_completed:
                     return self.NORMAL_COMPLETED_BG
 
-                return self.NORMAL_INCOMPLETE_BG
+                return self._task_color(task_data) or self.NORMAL_INCOMPLETE_BG
 
         except Exception:
             pass
@@ -876,11 +956,12 @@ class MatrixWidget:
             task_font_size = 10
 
         if is_completed:
+            # Completed tasks remain visually distinct regardless of color.
             text_bg = self.NORMAL_COMPLETED_BG
             text_fg = "#7f8c8d"
             font_style = ("Arial", task_font_size, "overstrike")
         else:
-            text_bg = self.NORMAL_INCOMPLETE_BG
+            text_bg = self._task_color(task_data) or self.NORMAL_INCOMPLETE_BG
             text_fg = "#2c3e50"
             font_style = ("Arial", task_font_size)
 
@@ -1078,6 +1159,10 @@ class MatrixWidget:
                     task_index
                 )
             )
+
+        # setup_matrix() binds before task widgets exist. Register the
+        # new task controls now so a two-finger gesture over task text, a
+        # checkbox, the Notes label, or task background reaches the canvas.
 
         return {
             "frame": task_frame,
